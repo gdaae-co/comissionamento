@@ -1,0 +1,1918 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Controle de Comissionamento - 1º GDAAE</title>
+  
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
+
+  <style>
+    body { margin: 0; padding: 0; background: #0c111b; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useMemo } = React;
+
+    // --- CONFIGURAÇÃO DO FIREBASE ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyC4NecwUMfKliMKi8W_69huhBm-Oitdh_Q",
+      authDomain: "comissionamento-1gdaae.firebaseapp.com",
+      projectId: "comissionamento-1gdaae",
+      storageBucket: "comissionamento-1gdaae.firebasestorage.app",
+      messagingSenderId: "350146761777",
+      appId: "1:350146761777:web:ae7ef7d32ce77778fff110"
+    };
+
+    if (!window.firebase.apps.length) {
+      window.firebase.initializeApp(firebaseConfig);
+    }
+    const db = window.firebase.firestore();
+    const auth = window.firebase.auth(); // Ativando módulo de Login
+
+    // MOTOR DE SALVAMENTO NUVEM
+    window.storage = {
+      get: async (key) => {
+        try {
+          const doc = await db.collection("appData").doc(key).get();
+          if (doc.exists) {
+            return { value: JSON.stringify(doc.data()) };
+          }
+          return null;
+        } catch (e) {
+          console.error("Erro ao buscar dados da Nuvem:", e);
+          return null;
+        }
+      },
+      set: async (key, val) => {
+        try {
+          await db.collection("appData").doc(key).set(JSON.parse(val));
+        } catch (e) {
+          console.error("Erro ao salvar dados na Nuvem:", e);
+        }
+      }
+    };
+
+    const STORAGE_KEY = "comissionamento-1gdaae-v2";
+
+    const POSTOS = [
+      "Cel","TC","Maj","Cap","1º Ten","2º Ten","Asp",
+      "ST","1º Sgt","2º Sgt","3º Sgt","Cb","Sd EP","Sd EV"
+    ];
+
+    const STATUS_CFG = {
+      ativo: { label: "Ativo", color: "#22c55e", bg: "rgba(34,197,94,0.12)" },
+      finalizado: { label: "Finalizado", color: "#3b82f6", bg: "rgba(59,130,246,0.12)" },
+      cancelado: { label: "Cancelado", color: "#ef4444", bg: "rgba(239,68,68,0.12)" },
+    };
+
+    const MODULO_TIPOS = ["Curso", "Missão", "Localidade"];
+
+    const uid = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+
+    function diffDays(a, b) {
+      if (!a || !b) return 0;
+      return Math.max(0, Math.ceil((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 864e5) + 1);
+    }
+
+    function calcDiasOS(oss) {
+      if (!oss || !oss.length) return 0;
+      return oss.reduce((acc, os) => acc + diffDays(os.dataInicio, os.dataFim), 0);
+    }
+
+    function fmtDate(d) {
+      if (!d) return "—";
+      const [y, m, dd] = d.split("-");
+      return `${dd}/${m}/${y}`;
+    }
+
+    function fmtMoney(v) {
+      const n = parseFloat(v) || 0;
+      return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    }
+
+    function calcAjudas(temDependente, totalDias) {
+      if (temDependente) return totalDias <= 89 ? 2 : 3;
+      return totalDias <= 89 ? 1 : 1.5;
+    }
+
+    /* ─── Icons ─── */
+    const I = {
+      shield: <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M12 2l7 4v5c0 5.25-3.5 9.74-7 11-3.5-1.26-7-5.75-7-11V6l7-4z"/></svg>,
+      plus: <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" d="M12 5v14M5 12h14"/></svg>,
+      users: <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,
+      check: <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M20 6L9 17l-5-5"/></svg>,
+      search: <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path strokeLinecap="round" d="M21 21l-4.35-4.35"/></svg>,
+      edit: <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path strokeLinecap="round" strokeLinejoin="round" d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+      trash: <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>,
+      x: <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" d="M18 6L6 18M6 6l12 12"/></svg>,
+      file: <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path strokeLinecap="round" strokeLinejoin="round" d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>,
+      eye: <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
+      doc: <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>,
+      dash: <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>,
+      back: <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M19 12H5m7-7l-7 7 7 7"/></svg>,
+      mail: <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>,
+      stamp: <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>,
+      coin: <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>,
+      clipboard: <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>,
+      chart: <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M18 20V10m-6 10V4m-6 16v-8"/></svg>,
+      logout: <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+    };
+
+    /* ─── Shared UI ─── */
+    function Modal({ open, onClose, title, children, width = 580 }) {
+      if (!open) return null;
+      return (
+        <div style={S.overlay} onClick={onClose}>
+          <div style={{ ...S.modal, maxWidth: width }} onClick={e => e.stopPropagation()}>
+            <div style={S.modalHead}>
+              <h2 style={S.modalTitle}>{title}</h2>
+              <button style={S.iconBtn} onClick={onClose}>{I.x}</button>
+            </div>
+            {children}
+          </div>
+        </div>
+      );
+    }
+
+    function FG({ label, children, flex }) {
+      return <div style={{ display: "flex", flexDirection: "column", gap: 5, ...(flex ? { flex: 1 } : {}) }}><span style={S.lbl}>{label}</span>{children}</div>;
+    }
+
+
+    /* ═══════════════════════════════════════
+       NOVA TELA: LOGIN PAGE
+       ═══════════════════════════════════════ */
+    function LoginPage() {
+      const [email, setEmail] = useState("");
+      const [password, setPassword] = useState("");
+      const [error, setError] = useState("");
+      const [loading, setLoading] = useState(false);
+
+      const handleLogin = async (e) => {
+        e.preventDefault();
+        setError("");
+        setLoading(true);
+        try {
+          await auth.signInWithEmailAndPassword(email, password);
+        } catch (err) {
+          setError("Acesso negado. Verifique seu e-mail e senha.");
+          setLoading(false);
+        }
+      };
+
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#0c111b' }}>
+          <div style={{ ...S.card, width: "100%", maxWidth: 400, padding: 32, margin: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+              <div style={{ ...S.logo, width: 64, height: 64, fontSize: 24 }}>{I.shield}</div>
+            </div>
+            <h2 style={{ textAlign: 'center', color: '#f1f5f9', margin: '0 0 8px', fontSize: 22, fontWeight: 800 }}>1º GDAAE</h2>
+            <p style={{ textAlign: 'center', color: '#64748b', fontSize: 13, marginBottom: 24, textTransform: 'uppercase', letterSpacing: '.05em' }}>Controle de Comissionamento</p>
+            
+            {error && <div style={{ background: 'rgba(239,68,68,0.12)', color: '#ef4444', padding: 12, borderRadius: 8, fontSize: 13, marginBottom: 16, textAlign: 'center', fontWeight: 600 }}>{error}</div>}
+            
+            <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <FG label="E-mail">
+                <input type="email" style={{...S.inp, padding: "12px 14px", fontSize: 14}} value={email} onChange={e => setEmail(e.target.value)} required placeholder="Seu e-mail cadastrado" />
+              </FG>
+              <FG label="Senha">
+                <input type="password" style={{...S.inp, padding: "12px 14px", fontSize: 14}} value={password} onChange={e => setPassword(e.target.value)} required placeholder="••••••••" />
+              </FG>
+              <button type="submit" style={{ ...S.btnPri, justifyContent: 'center', marginTop: 8, padding: 14, fontSize: 14, opacity: loading ? 0.7 : 1 }} disabled={loading}>
+                {loading ? "Autenticando..." : "Entrar no Sistema"}
+              </button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+
+    /* ═══════════════════════════════════════
+       ABA: DASHBOARD
+       ═══════════════════════════════════════ */
+    function DashboardTab({ propostas }) {
+      const [selectedMilId, setSelectedMilId] = useState("");
+
+      const allMil = useMemo(() => propostas.flatMap(p => (p.militares || []).map(m => {
+        const modDias = (m.modulos || []).reduce((s, mod) => s + diffDays(mod.dataInicio, mod.dataFim), 0);
+        const targetDias = parseInt(m.diasMinimos) || modDias;
+        const cumpDias = calcDiasOS(m.ordensServico);
+        const restantes = Math.max(0, targetDias - cumpDias);
+        const isFechado = targetDias > 0 && cumpDias >= targetDias;
+        const valTotal = (parseFloat(m.valorAbertura)||0) + (parseFloat(m.valorFechamento)||0);
+
+        return { ...m, _propTitulo: p.titulo, targetDias, cumpDias, restantes, isFechado, valTotal };
+      })).sort((a, b) => a.nomeGuerra?.localeCompare(b.nomeGuerra)), [propostas]);
+
+      const totMil = allMil.length;
+      const totFechados = allMil.filter(m => m.isFechado).length;
+      const totAndamento = totMil - totFechados;
+      const totDinheiro = allMil.reduce((acc, m) => acc + m.valTotal, 0);
+
+      const propChartData = useMemo(() => propostas.map(p => {
+        const pMil = p.militares || [];
+        const fechados = pMil.filter(m => {
+          const modDias = (m.modulos || []).reduce((s, mod) => s + diffDays(mod.dataInicio, mod.dataFim), 0);
+          const td = parseInt(m.diasMinimos) || modDias;
+          const cd = calcDiasOS(m.ordensServico);
+          return td > 0 && cd >= td;
+        }).length;
+        const andamento = pMil.length - fechados;
+        return { titulo: p.titulo || 'Sem Título', fechados, andamento, total: pMil.length };
+      }), [propostas]);
+
+      const selectedMil = allMil.find(m => m.id === selectedMilId);
+      
+      const DonutChart = ({ cump, rest, total }) => {
+        const safeTotal = total > 0 ? total : 1;
+        const pct = (cump / safeTotal) * 100;
+        const cappedPct = Math.min(pct, 100);
+        const dashArray = `${cappedPct} ${100 - cappedPct}`;
+        const cor = cappedPct >= 100 ? "#22c55e" : "#3b82f6";
+
+        return (
+          <div style={{ position: "relative", width: 140, height: 140 }}>
+            <svg viewBox="0 0 36 36" width="100%" height="100%">
+              <circle cx="18" cy="18" r="15.9155" fill="transparent" stroke="#1e293b" strokeWidth="4" />
+              <circle cx="18" cy="18" r="15.9155" fill="transparent" stroke={cor} strokeWidth="4" strokeDasharray={dashArray} strokeDashoffset="25" strokeLinecap="round" style={{ transition: "stroke-dasharray 1s ease" }} />
+            </svg>
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+              <span style={{ fontSize: 24, fontWeight: 800, color: "#f1f5f9", lineHeight: 1 }}>{Math.round(cappedPct)}%</span>
+            </div>
+          </div>
+        );
+      };
+
+      return (
+        <>
+          <div style={{ marginBottom: 24 }}>
+            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "#f1f5f9" }}>Dashboard Estratégico</h2>
+            <p style={{ margin: "4px 0 0", fontSize: 13, color: "#64748b" }}>Visão panorâmica e gráficos de acompanhamento de metas</p>
+          </div>
+
+          <div style={{ ...S.statsGrid, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", marginBottom: 24 }}>
+            {[
+              { label: "Total de Militares (Geral)", value: totMil, color: "#8b5cf6", icon: I.users },
+              { label: "Comiss. em Andamento", value: totAndamento, color: "#f59e0b", icon: I.clock },
+              { label: "Comiss. Fechados", value: totFechados, color: "#22c55e", icon: I.check },
+              { label: "Total Movimentado (R$)", value: fmtMoney(totDinheiro), color: "#3b82f6", icon: I.coin },
+            ].map((c, i) => (
+              <div key={i} style={S.statCard}>
+                <div style={{ ...S.statIcon, background: c.color + "18", color: c.color }}>{c.icon}</div>
+                <div><div style={{ ...S.statVal, fontSize: i === 3 ? 18 : 24 }}>{c.value}</div><div style={S.statLbl}>{c.label}</div></div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))", gap: 20 }}>
+            <div style={S.card}>
+              <div style={{ padding: "16px 24px", borderBottom: "1px solid #1e293b" }}>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#f1f5f9" }}>Status por Proposta</h3>
+              </div>
+              <div style={{ padding: 24 }}>
+                {propChartData.length === 0 ? (
+                  <p style={{ fontSize: 13, color: "#64748b", margin: 0 }}>Nenhuma proposta cadastrada.</p>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                    {propChartData.map((p, i) => {
+                      const pctFechado = p.total > 0 ? (p.fechados / p.total) * 100 : 0;
+                      const pctAndamento = p.total > 0 ? (p.andamento / p.total) * 100 : 0;
+                      
+                      return (
+                        <div key={i}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0" }}>{p.titulo} <span style={{ color: "#64748b", fontWeight: 400 }}>({p.total} militares)</span></span>
+                          </div>
+                          <div style={{ display: "flex", width: "100%", height: 12, background: "#1e293b", borderRadius: 6, overflow: "hidden" }}>
+                            {pctFechado > 0 && <div style={{ width: `${pctFechado}%`, background: "#22c55e", title: `${p.fechados} Fechados` }} />}
+                            {pctAndamento > 0 && <div style={{ width: `${pctAndamento}%`, background: "#3b82f6", title: `${p.andamento} Em Andamento` }} />}
+                          </div>
+                          <div style={{ display: "flex", gap: 12, marginTop: 6, fontSize: 11 }}>
+                            <span style={{ color: "#22c55e", fontWeight: 600 }}>■ Fechados: {p.fechados}</span>
+                            <span style={{ color: "#3b82f6", fontWeight: 600 }}>■ Andamento: {p.andamento}</span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={S.card}>
+              <div style={{ padding: "16px 24px", borderBottom: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#f1f5f9" }}>Gráfico Pessoal do Militar</h3>
+              </div>
+              <div style={{ padding: 24 }}>
+                <FG label="Selecione o Militar">
+                  <select style={S.inp} value={selectedMilId} onChange={e => setSelectedMilId(e.target.value)}>
+                    <option value="">— Escolha um militar —</option>
+                    {allMil.map(m => (
+                      <option key={m.id} value={m.id}>{m.postoGrad} {m.nomeGuerra} ({m._propTitulo})</option>
+                    ))}
+                  </select>
+                </FG>
+
+                {selectedMil ? (
+                  <div style={{ marginTop: 24, display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center" }}>
+                    <DonutChart cump={selectedMil.cumpDias} rest={selectedMil.restantes} total={selectedMil.targetDias} />
+                    
+                    <div style={{ flex: 1, minWidth: 200, display: "flex", flexDirection: "column", gap: 12 }}>
+                      {selectedMil.isFechado ? (
+                        <div style={{ padding: "8px 12px", background: "rgba(34,197,94,0.12)", borderLeft: "3px solid #22c55e", color: "#22c55e", fontSize: 13, fontWeight: 700, borderRadius: "0 6px 6px 0" }}>✔ COMISSIONAMENTO FECHADO</div>
+                      ) : (
+                        <div style={{ padding: "8px 12px", background: "rgba(59,130,246,0.12)", borderLeft: "3px solid #3b82f6", color: "#3b82f6", fontSize: 13, fontWeight: 700, borderRadius: "0 6px 6px 0" }}>▶ EM ANDAMENTO</div>
+                      )}
+                      
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                        <div style={{ background: "#0f172a", padding: 12, borderRadius: 8, border: "1px solid #1e293b" }}>
+                          <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", fontWeight: 600 }}>Dias Cumpridos</div>
+                          <div style={{ fontSize: 18, color: "#3b82f6", fontWeight: 800 }}>{selectedMil.cumpDias}</div>
+                        </div>
+                        <div style={{ background: "#0f172a", padding: 12, borderRadius: 8, border: "1px solid #1e293b" }}>
+                          <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", fontWeight: 600 }}>Dias Restantes</div>
+                          <div style={{ fontSize: 18, color: selectedMil.isFechado ? "#22c55e" : "#f59e0b", fontWeight: 800 }}>{selectedMil.restantes}</div>
+                        </div>
+                      </div>
+                      
+                      <div style={{ fontSize: 12, color: "#94a3b8", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <span>Meta total: <strong>{selectedMil.targetDias} dias</strong></span> •
+                        <span>Valor: <strong>{fmtMoney(selectedMil.valTotal)}</strong></span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 24, padding: 30, textAlign: "center", background: "#0f172a", borderRadius: 12, border: "1px dashed #1e293b" }}>
+                    <div style={{ color: "#475569", marginBottom: 8 }}>{I.users}</div>
+                    <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>Selecione um militar acima para visualizar seu progresso e metas.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+          </div>
+        </>
+      );
+    }
+
+    /* ═══════════════════════════════════════
+       CONSULTA TAB
+       ═══════════════════════════════════════ */
+    function ConsultaTab({ propostas, oficios }) {
+      const [search, setSearch] = useState("");
+      const [selectedMil, setSelectedMil] = useState(null);
+
+      const allMil = propostas.flatMap(p => (p.militares || []).map(m => ({
+        ...m,
+        _propId: p.id,
+        _propTitulo: p.titulo || "Proposta sem título",
+        _propData: p.dataCriacao,
+        _propMilitares: p.militares,
+        _propModulos: m.modulos || [],
+        _propValAb: m.valorAbertura,
+        _propValFe: m.valorFechamento,
+        _propValDi: m.valorDiarias,
+        _propTemDep: m.temDependente,
+        _propOmAdido: m.omAdido,
+        _oficioComprepOS: p.oficioComprepOS,
+      })));
+
+      const filtered = useMemo(() => {
+        if (!search.trim()) return [];
+        const s = search.toLowerCase();
+        return allMil.filter(m =>
+          m.nomeCompleto?.toLowerCase().includes(s) ||
+          m.nomeGuerra?.toLowerCase().includes(s) ||
+          m.subprocesso?.toLowerCase().includes(s) ||
+          m.postoGrad?.toLowerCase().includes(s) ||
+          m.numeroPag?.toLowerCase().includes(s) ||
+          m.saram?.toLowerCase().includes(s) ||
+          m.identidade?.toLowerCase().includes(s)
+        );
+      }, [allMil, search]);
+
+      const getOficio = (propId) => oficios.find(o => o.propostaId === propId) || {};
+
+      const renderFicha = (mil) => {
+        const of = getOficio(mil._propId);
+        const totalDias = mil._propModulos.reduce((s, mod) => s + diffDays(mod.dataInicio, mod.dataFim), 0);
+        const ajudas = calcAjudas(mil._propTemDep, totalDias);
+        const oss = mil.ordensServico || [];
+        
+        const targetDias = parseInt(mil.diasMinimos) || totalDias;
+        const diasCumpridos = calcDiasOS(oss);
+        const diasRestantes = Math.max(0, targetDias - diasCumpridos);
+        const isFechado = targetDias > 0 && diasCumpridos >= targetDias;
+
+        const Section = ({ title, color, children }) => (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ width: 3, height: 14, borderRadius: 2, background: color }} />
+              {title}
+            </div>
+            {children}
+          </div>
+        );
+
+        const Info = ({ label, value, mono }) => (
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 10, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>{label}</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: value && value !== "—" ? "#e2e8f0" : "#475569", ...(mono ? { fontFamily: "'JetBrains Mono','Fira Code',monospace", fontSize: 12 } : {}) }}>{value || "—"}</span>
+          </div>
+        );
+
+        const stOficio = OFICIO_STATUS[of.status] || {};
+
+        return (
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
+              <button style={{ ...S.actBtn, padding: 8 }} onClick={() => setSelectedMil(null)}>{I.back}</button>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#f1f5f9", flex: 1 }}>Ficha Completa</h2>
+            </div>
+
+            <div style={{ ...S.card, marginBottom: 16, padding: "22px 24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
+                <div style={{ ...S.avatar, width: 52, height: 52, fontSize: 20 }}>{mil.postoGrad?.charAt(0)}</div>
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: "#f1f5f9", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    {mil.postoGrad} {mil.nomeGuerra}
+                    {isFechado ? (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#22c55e", background: "rgba(34,197,94,0.12)", padding: "3px 8px", borderRadius: 4, display: "inline-flex", alignItems: "center", gap: 4, textTransform: "uppercase", letterSpacing: ".05em" }}>{I.check} Comissionamento Fechado</span>
+                    ) : (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#3b82f6", background: "rgba(59,130,246,0.12)", padding: "3px 8px", borderRadius: 4, textTransform: "uppercase", letterSpacing: ".05em", display: "inline-flex", alignItems: "center" }}>Em Andamento</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>{mil.nomeCompleto}</div>
+                </div>
+                {mil.subprocesso && <span style={{ marginLeft: "auto", ...S.mono, fontSize: 14, padding: "6px 14px" }}>Subprocesso: {mil.subprocesso}</span>}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12 }}>
+                <Info label="SARAM" value={mil.saram} mono />
+                <Info label="Identidade" value={mil.identidade} mono />
+                <Info label="OM Adido" value={mil._propOmAdido} />
+                <Info label="Dependente" value={mil._propTemDep ? "Sim" : "Não"} />
+                <Info label="Total Dias Módulos" value={String(totalDias)} />
+                <Info label="Ajudas de Custo" value={String(ajudas)} />
+              </div>
+              
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12, marginTop: 16, paddingTop: 16, borderTop: "1px solid #1e293b" }}>
+                <Info label="Meta Diária a Cumprir" value={`${targetDias} d`} />
+                <Info label="Dias Cumpridos (OS)" value={`${diasCumpridos} d`} />
+                <Info label="Dias Restantes" value={`${diasRestantes} d`} />
+              </div>
+            </div>
+
+            <div style={S.card}>
+              <div style={{ padding: "22px 24px" }}>
+                <Section title="Proposta" color="#3b82f6">
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 14 }}>
+                    <Info label="Título" value={mil._propTitulo} />
+                    <Info label="Data Criação" value={fmtDate(mil._propData)} />
+                    <Info label="Valor Abertura" value={fmtMoney(mil._propValAb)} />
+                    <Info label="Valor Fechamento" value={fmtMoney(mil._propValFe)} />
+                    <Info label="Total Ab+Fe" value={fmtMoney((parseFloat(mil._propValAb)||0) + (parseFloat(mil._propValFe)||0))} />
+                    <Info label="Valor Diárias" value={fmtMoney(mil._propValDi)} />
+                  </div>
+                  {mil._propModulos.length > 0 && (
+                    <div>
+                      <span style={{ fontSize: 10, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>Módulos</span>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
+                        {mil._propModulos.map((mod, i) => (
+                          <div key={i} style={{ background: "#0c111b", border: "1px solid #1e293b", borderRadius: 8, padding: "8px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0" }}>{mod.tipo}: {mod.descricao || "—"} {mod.localidade ? `(${mod.localidade})` : ""}</span>
+                            <span style={{ fontSize: 11, color: "#94a3b8" }}>{fmtDate(mod.dataInicio)} → {fmtDate(mod.dataFim)} · <strong style={{ color: "#3b82f6" }}>{diffDays(mod.dataInicio, mod.dataFim)}d</strong></span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </Section>
+
+                <Section title="Ofício de Solicitação" color="#8b5cf6">
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+                    <Info label="SIGAD" value={of.sigad} mono />
+                    <Info label="Status" value={stOficio.label} />
+                    <Info label="Ofício COMPREP" value={of.oficioComprep} mono />
+                  </div>
+                </Section>
+
+                <Section title="PAG" color="#22c55e">
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+                    <Info label="SIGAD Abertura PAG" value={mil.sigadPag} mono />
+                    <Info label="Nº PAG" value={mil.numeroPag} mono />
+                    <Info label="Nº Subprocesso" value={mil.subprocesso} mono />
+                  </div>
+                </Section>
+
+                <Section title="Portaria" color="#a78bfa">
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+                    <Info label="Portaria" value={mil.portaria} />
+                    <Info label="Item 9449" value={mil.item9449 === "ok" ? "Conforme" : mil.item9449 === "ajuste" ? "Necessita Ajuste" : "Pendente"} />
+                    <Info label="Boletim" value={mil.boletim} />
+                  </div>
+                </Section>
+
+                <Section title="Numerário — Ajuda de Custo (1378)" color="#f59e0b">
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+                    <Info label="Status Concessão" value={mil.numStatus === "concedido" ? "Concedido" : mil.numStatus === "negado" ? "Negado" : "Pendente"} />
+                    <Info label="Boletim Publicação" value={mil.numBoletim} />
+                  </div>
+                </Section>
+
+                <Section title={`Ordens de Serviço (${oss.length})`} color="#38bdf8">
+                  {mil._oficioComprepOS || getOficio(mil._propId)?.oficioComprep ? (
+                    <div style={{ marginBottom: 10 }}>
+                      <Info label="COMPREP Autorização" value={getOficio(mil._propId)?.oficioComprep || mil._oficioComprepOS} mono />
+                    </div>
+                  ) : null}
+                  {oss.length === 0 ? (
+                    <span style={{ fontSize: 12, color: "#475569" }}>Nenhuma OS cadastrada</span>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {oss.map((os, i) => (
+                        <div key={os.id} style={{ background: "#0c111b", border: "1px solid #1e293b", borderRadius: 8, padding: "10px 14px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: "#e2e8f0" }}>OS {i+1}: <span style={{ fontFamily: "'JetBrains Mono','Fira Code',monospace" }}>{os.numero || "—"}</span></span>
+                            <span style={{ fontSize: 11, color: "#94a3b8" }}>{fmtDate(os.dataInicio)} → {fmtDate(os.dataFim)}</span>
+                          </div>
+                          <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>{os.missaoCurso || "—"} {os.localidade ? `· ${os.localidade}` : ""}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Section>
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      if (selectedMil) return renderFicha(selectedMil);
+
+      const totalMil = allMil.length;
+      const comSubprocesso = allMil.filter(m => m.subprocesso).length;
+
+      return (
+        <>
+          <div style={{ marginBottom: 20 }}>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#f1f5f9" }}>Consulta de Comissionamento</h2>
+            <p style={{ margin: "4px 0 0", fontSize: 13, color: "#64748b" }}>Pesquise por nome, nome de guerra, SARAM, Idt, subprocesso ou nº PAG</p>
+          </div>
+
+          <div style={{ ...S.card, padding: "20px 24px", marginBottom: 16 }}>
+            <div style={S.searchWrap}>
+              <span style={S.searchIco}>{I.search}</span>
+              <input
+                style={{ ...S.searchIn, fontSize: 15, padding: "14px 18px 14px 42px" }}
+                placeholder="Digite o nº do SARAM, Identidade, nome do militar..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                autoFocus
+              />
+            </div>
+          </div>
+
+          {search.trim() === "" ? (
+            <div style={{ ...S.card, ...S.empty }}>
+              <div style={{ color: "#334155", display: "flex", justifyContent: "center", marginBottom: 12 }}>{I.search}</div>
+              <p style={{ fontSize: 15, fontWeight: 600, color: "#94a3b8", margin: "0 0 6px" }}>Digite para pesquisar</p>
+              <p style={{ fontSize: 13, color: "#475569", margin: 0 }}>Busque por nome, nome de guerra, SARAM, Idt, nº subprocesso ou nº PAG.</p>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div style={{ ...S.card, ...S.empty }}>
+              <p style={{ fontSize: 15, fontWeight: 600, color: "#94a3b8", margin: "0 0 6px" }}>Nenhum resultado para "{search}"</p>
+              <p style={{ fontSize: 13, color: "#475569", margin: 0 }}>Verifique a grafia ou tente outro termo.</p>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {filtered.map(mil => {
+                const targetDias = parseInt(mil.diasMinimos) || (mil.modulos || []).reduce((s, m) => s + diffDays(m.dataInicio, m.dataFim), 0);
+                const cumpDias = calcDiasOS(mil.ordensServico);
+                const isFechado = targetDias > 0 && cumpDias >= targetDias;
+
+                return (
+                  <div key={mil.id + mil._propId} style={{ ...S.card, cursor: "pointer", transition: "border-color .2s" }} onClick={() => setSelectedMil(mil)}>
+                    <div style={{ padding: "16px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <div style={S.avatar}>{mil.postoGrad?.charAt(0)}</div>
+                        <div>
+                          <div style={{ fontWeight: 600, color: "#f1f5f9", fontSize: 14 }}>{mil.postoGrad} {mil.nomeGuerra}</div>
+                          <div style={{ fontSize: 12, color: "#64748b" }}>{mil.nomeCompleto}</div>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                        {isFechado ? (
+                          <span style={{ fontSize: 11, fontWeight: 700, color: "#22c55e", background: "rgba(34,197,94,0.12)", padding: "3px 8px", borderRadius: 4, display: "flex", alignItems: "center", gap: 4 }}>
+                            {I.check} Fechado
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: 11, fontWeight: 600, color: "#3b82f6", background: "rgba(59,130,246,0.12)", padding: "3px 8px", borderRadius: 4 }}>
+                            Em Andamento
+                          </span>
+                        )}
+                        {mil.saram && <span style={{ ...S.mono, fontSize: 12, padding: "4px 8px" }}>SARAM: {mil.saram}</span>}
+                        {mil.subprocesso && <span style={{ ...S.mono, fontSize: 13, padding: "4px 10px" }}>Sub: {mil.subprocesso}</span>}
+                        <span style={{ color: "#3b82f6", display: "flex", alignItems: "center" }}>{I.eye}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{ fontSize: 12, color: "#475569", marginTop: 4 }}>{filtered.length} resultado{filtered.length !== 1 ? "s" : ""}</div>
+            </div>
+          )}
+        </>
+      );
+    }
+
+    /* ═══════════════════════════════════════
+       PROPOSTAS TAB
+       ═══════════════════════════════════════ */
+    function emptyMilProposta() {
+      return { id: uid(), nomeCompleto: "", nomeGuerra: "", postoGrad: "Sd EV", identidade: "", saram: "", temDependente: false, omAdido: "", diasMinimos: "", modulos: [emptyModulo()], valorAbertura: "", valorFechamento: "", valorDiarias: "" };
+    }
+    function emptyModulo() {
+      return { id: uid(), tipo: "Curso", descricao: "", localidade: "", dataInicio: "", dataFim: "" };
+    }
+
+    function calcTotaisProposta(prop) {
+      let somaAb = 0, somaFe = 0, somaDi = 0;
+      (prop.militares || []).forEach(m => {
+        somaAb += parseFloat(m.valorAbertura) || 0;
+        somaFe += parseFloat(m.valorFechamento) || 0;
+        somaDi += parseFloat(m.valorDiarias) || 0;
+      });
+      return { totalAbertura: somaAb, totalFechamento: somaFe, totalAF: somaAb + somaFe, totalDiarias: somaDi };
+    }
+
+    function PropostasTab({ propostas, setPropostas }) {
+      const [editing, setEditing] = useState(null);
+      const [viewProp, setViewProp] = useState(null);
+      const [delProp, setDelProp] = useState(null);
+
+      const handleNew = () => {
+        setEditing({ id: uid(), titulo: "", dataCriacao: new Date().toISOString().split("T")[0], militares: [emptyMilProposta()], status: "rascunho" });
+      };
+
+      const handleSave = (prop) => {
+        setPropostas(prev => {
+          const idx = prev.findIndex(p => p.id === prop.id);
+          if (idx >= 0) { const n = [...prev]; n[idx] = prop; return n; }
+          return [...prev, prop];
+        });
+        setEditing(null);
+      };
+
+      const handleDel = () => { setPropostas(p => p.filter(x => x.id !== delProp.id)); setDelProp(null); };
+
+      if (editing) return <PropostaEditor proposta={editing} onSave={handleSave} onCancel={() => setEditing(null)} />;
+      if (viewProp) return <PropostaViewer proposta={viewProp} onBack={() => setViewProp(null)} onEdit={(p) => { setViewProp(null); setEditing(p); }} />;
+
+      return (
+        <>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#f1f5f9" }}>Propostas de Comissionamento</h2>
+              <p style={{ margin: "4px 0 0", fontSize: 13, color: "#64748b" }}>{propostas.length} proposta{propostas.length !== 1 ? "s" : ""} registrada{propostas.length !== 1 ? "s" : ""}</p>
+            </div>
+            <button style={S.btnPri} onClick={handleNew}>{I.plus}<span>Nova Proposta</span></button>
+          </div>
+
+          {propostas.length === 0 ? (
+            <div style={{ ...S.card, ...S.empty }}>
+              <div style={{ color: "#334155", display: "flex", justifyContent: "center", marginBottom: 12 }}>{I.doc}</div>
+              <p style={{ fontSize: 15, fontWeight: 600, color: "#94a3b8", margin: "0 0 6px" }}>Nenhuma proposta criada</p>
+              <p style={{ fontSize: 13, color: "#475569", margin: 0 }}>Clique em "Nova Proposta" para começar.</p>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 14 }}>
+              {propostas.map(p => {
+                const totais = calcTotaisProposta(p);
+                return (
+                  <div key={p.id} style={{ ...S.card, cursor: "pointer", transition: "border-color .2s" }} onClick={() => setViewProp(p)}>
+                    <div style={{ padding: "20px 24px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#f1f5f9" }}>{p.titulo || "Proposta sem título"}</h3>
+                        <p style={{ margin: "4px 0 0", fontSize: 12, color: "#64748b" }}>Criada em {fmtDate(p.dataCriacao)} · {p.militares.length} militar{p.militares.length !== 1 ? "es" : ""}</p>
+                        <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                          {p.militares.slice(0, 5).map(m => (
+                            <span key={m.id} style={{ fontSize: 11, fontWeight: 600, color: "#93c5fd", background: "rgba(59,130,246,0.12)", padding: "2px 8px", borderRadius: 4 }}>{m.postoGrad} {m.nomeGuerra || "—"}</span>
+                          ))}
+                          {p.militares.length > 5 && <span style={{ fontSize: 11, color: "#64748b" }}>+{p.militares.length - 5}</span>}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+                        <div style={{ textAlign: "right" }}>
+                          <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: ".04em" }}>Total Abert. + Fech.</div>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: "#22c55e" }}>{fmtMoney(totais.totalAF)}</div>
+                        </div>
+                        <div style={{ display: "flex", gap: 4 }} onClick={e => e.stopPropagation()}>
+                          <button style={S.actBtn} title="Visualizar" onClick={() => setViewProp(p)}>{I.eye}</button>
+                          <button style={S.actBtn} title="Editar" onClick={() => setEditing(p)}>{I.edit}</button>
+                          <button style={{ ...S.actBtn, color: "#ef4444" }} title="Excluir" onClick={() => setDelProp(p)}>{I.trash}</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {delProp && <Modal open onClose={() => setDelProp(null)} title="Confirmar Exclusão" width={420}>
+            <div style={{ padding: "0 28px 28px" }}>
+              <p style={{ fontSize: 14, color: "#94a3b8", lineHeight: 1.6, margin: 0 }}>Excluir a proposta <strong>"{delProp.titulo || "sem título"}"</strong>?</p>
+              <div style={S.fActions}><button style={S.btnSec} onClick={() => setDelProp(null)}>Cancelar</button><button style={{ ...S.btnPri, background: "#dc2626" }} onClick={handleDel}>Excluir</button></div>
+            </div>
+          </Modal>}
+        </>
+      );
+    }
+
+    /* ─── Proposta Editor ─── */
+    function PropostaEditor({ proposta, onSave, onCancel }) {
+      const [prop, setProp] = useState(JSON.parse(JSON.stringify(proposta)));
+
+      const updateMil = (milId, field, value) => {
+        setProp(p => ({ ...p, militares: p.militares.map(m => m.id === milId ? { ...m, [field]: value } : m) }));
+      };
+
+      const updateModulo = (milId, modId, field, value) => {
+        setProp(p => ({
+          ...p,
+          militares: p.militares.map(m => m.id === milId ? {
+            ...m, modulos: m.modulos.map(mod => mod.id === modId ? { ...mod, [field]: value } : mod)
+          } : m)
+        }));
+      };
+
+      const addModulo = (milId) => {
+        setProp(p => ({ ...p, militares: p.militares.map(m => m.id === milId ? { ...m, modulos: [...m.modulos, emptyModulo()] } : m) }));
+      };
+
+      const removeModulo = (milId, modId) => {
+        setProp(p => ({ ...p, militares: p.militares.map(m => m.id === milId ? { ...m, modulos: m.modulos.filter(mod => mod.id !== modId) } : m) }));
+      };
+
+      const addMilitar = () => setProp(p => ({ ...p, militares: [...p.militares, emptyMilProposta()] }));
+      const removeMilitar = (milId) => setProp(p => ({ ...p, militares: p.militares.filter(m => m.id !== milId) }));
+
+      const totais = calcTotaisProposta(prop);
+
+      return (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
+            <button style={{ ...S.actBtn, padding: 8 }} onClick={onCancel}>{I.back}</button>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#f1f5f9", flex: 1 }}>{proposta.titulo ? "Editar Proposta" : "Nova Proposta"}</h2>
+            <button style={S.btnPri} onClick={() => onSave(prop)}>Salvar Proposta</button>
+          </div>
+
+          <div style={{ ...S.card, padding: 22, marginBottom: 16 }}>
+            <FG label="Título da Proposta"><input style={S.inp} value={prop.titulo} onChange={e => setProp(p => ({ ...p, titulo: e.target.value }))} placeholder="Ex: Comissionamento 1º Semestre 2026" /></FG>
+          </div>
+
+          {prop.militares.map((mil, milIdx) => {
+            const totalDias = mil.modulos.reduce((s, mod) => s + diffDays(mod.dataInicio, mod.dataFim), 0);
+            const ajudas = calcAjudas(mil.temDependente, totalDias);
+            const valAb = parseFloat(mil.valorAbertura) || 0;
+            const valFe = parseFloat(mil.valorFechamento) || 0;
+            const totalAF = valAb + valFe;
+
+            return (
+              <div key={mil.id} style={{ ...S.card, marginBottom: 16, overflow: "visible" }}>
+                <div style={{ padding: "16px 22px", borderBottom: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(59,130,246,0.04)" }}>
+                  <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#93c5fd" }}>
+                    {mil.postoGrad && mil.nomeGuerra ? `${mil.postoGrad} ${mil.nomeGuerra}` : `Militar ${milIdx + 1}`}
+                  </h3>
+                  {prop.militares.length > 1 && <button style={{ ...S.actBtn, color: "#ef4444" }} onClick={() => removeMilitar(mil.id)}>{I.trash}</button>}
+                </div>
+                <div style={{ padding: 22, display: "flex", flexDirection: "column", gap: 14 }}>
+                  <FG label="Nome Completo"><input style={S.inp} value={mil.nomeCompleto} onChange={e => updateMil(mil.id, "nomeCompleto", e.target.value)} placeholder="Nome completo" /></FG>
+                  <div style={S.row}>
+                    <FG label="Nome de Guerra" flex><input style={S.inp} value={mil.nomeGuerra} onChange={e => updateMil(mil.id, "nomeGuerra", e.target.value)} placeholder="Nome de Guerra" /></FG>
+                    <FG label="Posto/Grad" flex><select style={S.inp} value={mil.postoGrad} onChange={e => updateMil(mil.id, "postoGrad", e.target.value)}>{POSTOS.map(p => <option key={p}>{p}</option>)}</select></FG>
+                  </div>
+                  
+                  <div style={S.row}>
+                    <FG label="Identidade Militar" flex><input style={S.inp} value={mil.identidade || ""} onChange={e => updateMil(mil.id, "identidade", e.target.value)} placeholder="Ex: 1234567" /></FG>
+                    <FG label="SARAM" flex><input style={S.inp} value={mil.saram || ""} onChange={e => updateMil(mil.id, "saram", e.target.value)} placeholder="Ex: 123456" /></FG>
+                  </div>
+
+                  <div style={S.row}>
+                    <FG label="Dependente?" flex>
+                      <div style={{ display: "flex", gap: 16, marginTop: 4 }}>
+                        {[{ v: true, l: "Sim" }, { v: false, l: "Não" }].map(opt => (
+                          <label key={String(opt.v)} style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer", fontSize: 13, color: mil.temDependente === opt.v ? "#f1f5f9" : "#64748b", fontWeight: mil.temDependente === opt.v ? 600 : 400 }}>
+                            <div onClick={() => updateMil(mil.id, "temDependente", opt.v)} style={{
+                              width: 20, height: 20, borderRadius: 10,
+                              border: `2px solid ${mil.temDependente === opt.v ? "#3b82f6" : "#334155"}`,
+                              background: mil.temDependente === opt.v ? "#3b82f6" : "transparent",
+                              display: "flex", alignItems: "center", justifyContent: "center", transition: "all .15s", flexShrink: 0,
+                            }}>
+                              {mil.temDependente === opt.v && <div style={{ width: 7, height: 7, borderRadius: 4, background: "#fff" }} />}
+                            </div>
+                            {opt.l}
+                          </label>
+                        ))}
+                      </div>
+                    </FG>
+                    <FG label="OM Adido" flex><input style={S.inp} value={mil.omAdido} onChange={e => updateMil(mil.id, "omAdido", e.target.value)} placeholder="Ex: CIAvEx, EsACosAAe..." /></FG>
+                    
+                    <FG label="Meta (Dias Mínimos)" flex><input style={S.inp} type="number" min="0" value={mil.diasMinimos || ""} onChange={e => updateMil(mil.id, "diasMinimos", e.target.value)} placeholder={`Padrão: soma dos módulos`} /></FG>
+                  </div>
+
+                  {/* Módulos */}
+                  <div style={{ marginTop: 6 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                      <span style={{ ...S.lbl, fontSize: 12, margin: 0 }}>MÓDULOS ({mil.modulos.length})</span>
+                      <button style={S.btnGhost} onClick={() => addModulo(mil.id)}>{I.plus} Módulo</button>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {mil.modulos.map((mod, modIdx) => {
+                        const dias = diffDays(mod.dataInicio, mod.dataFim);
+                        return (
+                          <div key={mod.id} style={{ background: "#0c111b", border: "1px solid #1e293b", borderRadius: 12, padding: 16 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                              <span style={{ fontSize: 12, fontWeight: 600, color: "#475569" }}>Módulo {modIdx + 1}</span>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                {dias > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "#3b82f6", background: "rgba(59,130,246,0.12)", padding: "2px 10px", borderRadius: 5 }}>{dias} dias</span>}
+                                {mil.modulos.length > 1 && <button style={{ ...S.actBtn, color: "#ef4444", padding: 3 }} onClick={() => removeModulo(mil.id, mod.id)}>{I.x}</button>}
+                              </div>
+                            </div>
+                            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                              <FG label="Tipo" flex><select style={S.inp} value={mod.tipo} onChange={e => updateModulo(mil.id, mod.id, "tipo", e.target.value)}>{MODULO_TIPOS.map(t => <option key={t}>{t}</option>)}</select></FG>
+                              <FG label="Descrição" flex><input style={S.inp} value={mod.descricao} onChange={e => updateModulo(mil.id, mod.id, "descricao", e.target.value)} placeholder="CADOM, OOM-III..." /></FG>
+                              <FG label="Localidade" flex><input style={S.inp} value={mod.localidade} onChange={e => updateModulo(mil.id, mod.id, "localidade", e.target.value)} placeholder="Brasília-DF" /></FG>
+                            </div>
+                            <div style={{ ...S.row, marginTop: 10 }}>
+                              <FG label="Início" flex><input type="date" style={S.inp} value={mod.dataInicio} onChange={e => updateModulo(mil.id, mod.id, "dataInicio", e.target.value)} /></FG>
+                              <FG label="Término" flex><input type="date" style={S.inp} value={mod.dataFim} onChange={e => updateModulo(mil.id, mod.id, "dataFim", e.target.value)} /></FG>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Resumo calculado */}
+                  <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 12, padding: 20, marginTop: 6 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 16, marginBottom: 18 }}>
+                      <div>
+                        <span style={{ fontSize: 10, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>Total de Dias</span>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: "#f1f5f9", marginTop: 2 }}>{totalDias}</div>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: 10, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>Ajudas de Custo</span>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: "#f59e0b", marginTop: 2 }}>{ajudas}</div>
+                        <span style={{ fontSize: 11, color: "#475569" }}>{mil.temDependente ? "Com dep." : "Sem dep."} · {totalDias <= 89 ? "≤ 89 dias" : "> 89 dias"}</span>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: 10, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>Total Abert. + Fech.</span>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: "#22c55e", marginTop: 2 }}>{fmtMoney(totalAF)}</div>
+                      </div>
+                    </div>
+                    <div style={{ ...S.row, gap: 12 }}>
+                      <FG label="Valor Abertura (R$)" flex><input style={S.inp} type="number" step="0.01" min="0" value={mil.valorAbertura} onChange={e => updateMil(mil.id, "valorAbertura", e.target.value)} placeholder="0,00" /></FG>
+                      <FG label="Valor Fechamento (R$)" flex><input style={S.inp} type="number" step="0.01" min="0" value={mil.valorFechamento} onChange={e => updateMil(mil.id, "valorFechamento", e.target.value)} placeholder="0,00" /></FG>
+                      <FG label="Valor Diárias (comparativo) (R$)" flex><input style={S.inp} type="number" step="0.01" min="0" value={mil.valorDiarias} onChange={e => updateMil(mil.id, "valorDiarias", e.target.value)} placeholder="0,00" /></FG>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          <button style={{ ...S.btnSec, width: "100%", padding: 14, marginBottom: 20, borderStyle: "dashed", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }} onClick={addMilitar}>
+            {I.plus} Adicionar Militar à Proposta
+          </button>
+
+          {/* SUMÁRIO GERAL */}
+          <div style={{ ...S.card, marginBottom: 20, overflow: "hidden" }}>
+            <div style={{ padding: "16px 24px", borderBottom: "1px solid #1e293b", background: "rgba(34,197,94,0.05)" }}>
+              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#22c55e" }}>Somatório Geral da Proposta</h3>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}>
+              {[
+                { l: "Σ Abertura", v: totais.totalAbertura, c: "#3b82f6" },
+                { l: "Σ Fechamento", v: totais.totalFechamento, c: "#8b5cf6" },
+                { l: "Σ Abert. + Fech.", v: totais.totalAF, c: "#22c55e" },
+                { l: "Σ Diárias (comparativo)", v: totais.totalDiarias, c: "#f59e0b" },
+              ].map((x, i) => (
+                <div key={i} style={{ padding: "20px 24px", borderRight: i < 3 ? "1px solid #1e293b" : "none" }}>
+                  <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 6 }}>{x.l}</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: x.c }}>{fmtMoney(x.v)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ ...S.fActions, marginBottom: 40 }}>
+            <button style={S.btnSec} onClick={onCancel}>Cancelar</button>
+            <button style={S.btnPri} onClick={() => onSave(prop)}>Salvar Proposta</button>
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── Proposta Viewer ─── */
+    function PropostaViewer({ proposta, onBack, onEdit }) {
+      const totais = calcTotaisProposta(proposta);
+      return (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
+            <button style={{ ...S.actBtn, padding: 8 }} onClick={onBack}>{I.back}</button>
+            <div style={{ flex: 1 }}>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#f1f5f9" }}>{proposta.titulo || "Proposta sem título"}</h2>
+              <p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748b" }}>Criada em {fmtDate(proposta.dataCriacao)} · {proposta.militares.length} militar{proposta.militares.length !== 1 ? "es" : ""}</p>
+            </div>
+            <button style={S.btnPri} onClick={() => onEdit(proposta)}>{I.edit}<span>Editar</span></button>
+          </div>
+
+          {proposta.militares.map((mil, idx) => {
+            const totalDias = mil.modulos.reduce((s, mod) => s + diffDays(mod.dataInicio, mod.dataFim), 0);
+            const ajudas = calcAjudas(mil.temDependente, totalDias);
+            const valAb = parseFloat(mil.valorAbertura) || 0;
+            const valFe = parseFloat(mil.valorFechamento) || 0;
+
+            const targetDias = parseInt(mil.diasMinimos) || totalDias;
+            const diasCumpridos = calcDiasOS(mil.ordensServico);
+            const isFechado = targetDias > 0 && diasCumpridos >= targetDias;
+
+            return (
+              <div key={mil.id} style={{ ...S.card, marginBottom: 16 }}>
+                <div style={{ padding: "16px 22px", borderBottom: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <div style={S.avatar}>{mil.postoGrad?.charAt(0)}</div>
+                    <div>
+                      <div style={{ fontWeight: 700, color: "#f1f5f9", fontSize: 14 }}>{mil.postoGrad} {mil.nomeGuerra}</div>
+                      <div style={{ fontSize: 12, color: "#64748b" }}>{mil.nomeCompleto}</div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
+                    <span style={{ fontSize: 12, color: "#94a3b8" }}>Idt: <strong style={{ color: "#f1f5f9" }}>{mil.identidade || "—"}</strong></span>
+                    <span style={{ fontSize: 12, color: "#94a3b8" }}>SARAM: <strong style={{ color: "#f1f5f9" }}>{mil.saram || "—"}</strong></span>
+                    <span style={{ fontSize: 12, color: "#94a3b8" }}>OM: <strong style={{ color: "#f1f5f9" }}>{mil.omAdido || "—"}</strong></span>
+                    <span style={{ fontSize: 12, color: "#94a3b8" }}>Meta: <strong style={{ color: "#38bdf8" }}>{targetDias}d</strong></span>
+                    
+                    {isFechado ? (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#22c55e", background: "rgba(34,197,94,0.12)", padding: "2px 8px", borderRadius: 4, display: "flex", alignItems: "center", gap: 4 }}>
+                        {I.check} Fechado
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 11, fontWeight: 600, color: "#3b82f6", background: "rgba(59,130,246,0.12)", padding: "2px 8px", borderRadius: 4 }}>
+                        Em Andamento
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ padding: 22 }}>
+                  <span style={{ ...S.lbl, fontSize: 11, marginBottom: 10, display: "block" }}>MÓDULOS</span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+                    {mil.modulos.map((mod) => {
+                      const dias = diffDays(mod.dataInicio, mod.dataFim);
+                      return (
+                        <div key={mod.id} style={{ background: "#0c111b", border: "1px solid #1e293b", borderRadius: 10, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                          <div>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: "#e2e8f0" }}>{mod.tipo}: {mod.descricao || "—"}</span>
+                            {mod.localidade && <span style={{ fontSize: 12, color: "#64748b", marginLeft: 10 }}>({mod.localidade})</span>}
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <span style={{ fontSize: 12, color: "#94a3b8" }}>{fmtDate(mod.dataInicio)} → {fmtDate(mod.dataFim)}</span>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: "#3b82f6", background: "rgba(59,130,246,0.12)", padding: "2px 10px", borderRadius: 5 }}>{dias}d</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 14, background: "#0f172a", border: "1px solid #1e293b", borderRadius: 12, padding: 18 }}>
+                    {[
+                      { l: "Total Dias", v: totalDias, c: "#f1f5f9", fmt: false },
+                      { l: "Ajudas de Custo", v: ajudas, c: "#f59e0b", fmt: false },
+                      { l: "Abertura", v: valAb, c: "#3b82f6", fmt: true },
+                      { l: "Fechamento", v: valFe, c: "#8b5cf6", fmt: true },
+                      { l: "Abert.+Fech.", v: valAb + valFe, c: "#22c55e", fmt: true },
+                      { l: "Diárias", v: parseFloat(mil.valorDiarias) || 0, c: "#f59e0b", fmt: true },
+                    ].map((x, i) => (
+                      <div key={i}>
+                        <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>{x.l}</div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: x.c, marginTop: 2 }}>{x.fmt ? fmtMoney(x.v) : x.v}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* TOTAL GERAL */}
+          <div style={{ ...S.card, marginBottom: 40, overflow: "hidden" }}>
+            <div style={{ padding: "16px 24px", borderBottom: "1px solid #1e293b", background: "rgba(34,197,94,0.05)" }}>
+              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#22c55e" }}>Somatório Geral</h3>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}>
+              {[
+                { l: "Σ Abertura", v: totais.totalAbertura, c: "#3b82f6" },
+                { l: "Σ Fechamento", v: totais.totalFechamento, c: "#8b5cf6" },
+                { l: "Σ Abert. + Fech.", v: totais.totalAF, c: "#22c55e" },
+                { l: "Σ Diárias", v: totais.totalDiarias, c: "#f59e0b" },
+              ].map((x, i) => (
+                <div key={i} style={{ padding: "20px 24px", borderRight: i < 3 ? "1px solid #1e293b" : "none" }}>
+                  <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 6 }}>{x.l}</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: x.c }}>{fmtMoney(x.v)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════
+       OFÍCIOS TAB
+       ═══════════════════════════════════════ */
+    const OFICIO_STATUS = {
+      aguardando: { label: "Aguardando", color: "#f59e0b", bg: "rgba(245,158,11,0.12)" },
+      autorizado: { label: "Autorizado", color: "#22c55e", bg: "rgba(34,197,94,0.12)" },
+      negado: { label: "Negado", color: "#ef4444", bg: "rgba(239,68,68,0.12)" },
+    };
+
+    function OficiosTab({ oficios, setOficios, propostas }) {
+      const [showForm, setShowForm] = useState(false);
+      const [editOf, setEditOf] = useState(null);
+      const [delOf, setDelOf] = useState(null);
+
+      const handleAdd = (f) => { setOficios(p => [...p, { ...f, id: uid(), criadoEm: new Date().toISOString() }]); setShowForm(false); };
+      const handleEdit = (f) => { setOficios(p => p.map(o => o.id === editOf.id ? { ...o, ...f } : o)); setEditOf(null); };
+      const handleDel = () => { setOficios(p => p.filter(o => o.id !== delOf.id)); setDelOf(null); };
+
+      const getPropostaTitulo = (propId) => {
+        const p = propostas.find(x => x.id === propId);
+        return p ? (p.titulo || "Proposta sem título") : "— Proposta removida —";
+      };
+
+      return (
+        <>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#f1f5f9" }}>Ofícios de Solicitação de Abertura</h2>
+              <p style={{ margin: "4px 0 0", fontSize: 13, color: "#64748b" }}>Controle de autorização vinculado às propostas</p>
+            </div>
+            <button style={S.btnPri} onClick={() => setShowForm(true)}>{I.plus}<span>Novo Ofício</span></button>
+          </div>
+
+          <div style={{ ...S.statsGrid, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", marginBottom: 20 }}>
+            {[
+              { label: "Total", value: oficios.length, color: "#6366f1" },
+              { label: "Aguardando", value: oficios.filter(o => o.status === "aguardando").length, color: "#f59e0b" },
+              { label: "Autorizados", value: oficios.filter(o => o.status === "autorizado").length, color: "#22c55e" },
+              { label: "Negados", value: oficios.filter(o => o.status === "negado").length, color: "#ef4444" },
+            ].map((c, i) => (
+              <div key={i} style={S.statCard}>
+                <div style={{ ...S.statIcon, background: c.color + "18", color: c.color }}>{I.mail}</div>
+                <div><div style={S.statVal}>{c.value}</div><div style={S.statLbl}>{c.label}</div></div>
+              </div>
+            ))}
+          </div>
+
+          {oficios.length === 0 ? (
+            <div style={{ ...S.card, ...S.empty }}>
+              <div style={{ color: "#334155", display: "flex", justifyContent: "center", marginBottom: 12 }}>{I.mail}</div>
+              <p style={{ fontSize: 15, fontWeight: 600, color: "#94a3b8", margin: "0 0 6px" }}>Nenhum ofício registrado</p>
+              <p style={{ fontSize: 13, color: "#475569", margin: 0 }}>Clique em "Novo Ofício" para registrar.</p>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 12 }}>
+              {oficios.map(o => {
+                const stCfg = OFICIO_STATUS[o.status] || OFICIO_STATUS.aguardando;
+                return (
+                  <div key={o.id} style={S.card}>
+                    <div style={{ padding: "18px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 14, flex: 1, minWidth: 200 }}>
+                        <div style={{ width: 42, height: 42, borderRadius: 11, background: stCfg.bg, color: stCfg.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{I.mail}</div>
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: "#f1f5f9", fontFamily: "'JetBrains Mono','Fira Code',monospace" }}>{o.sigad || "—"}</span>
+                            <span style={{ ...S.badge, color: stCfg.color, background: stCfg.bg }}>{stCfg.label}</span>
+                          </div>
+                          <div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }}>
+                            Proposta: <strong style={{ color: "#94a3b8" }}>{getPropostaTitulo(o.propostaId)}</strong>
+                          </div>
+                          {o.status === "autorizado" && o.oficioComprep && (
+                            <div style={{ fontSize: 12, color: "#22c55e", marginTop: 3 }}>
+                              COMPREP: <strong style={{ fontFamily: "'JetBrains Mono','Fira Code',monospace" }}>{o.oficioComprep}</strong>
+                            </div>
+                          )}
+                          {o.observacoes && <div style={{ fontSize: 12, color: "#475569", marginTop: 2 }}>{o.observacoes}</div>}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button style={S.actBtn} title="Editar" onClick={() => setEditOf(o)}>{I.edit}</button>
+                        <button style={{ ...S.actBtn, color: "#ef4444" }} title="Excluir" onClick={() => setDelOf(o)}>{I.trash}</button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <Modal open={showForm} onClose={() => setShowForm(false)} title="Novo Ofício de Solicitação" width={500}>
+            <OficioForm propostas={propostas} onSave={handleAdd} onCancel={() => setShowForm(false)} />
+          </Modal>
+          <Modal open={!!editOf} onClose={() => setEditOf(null)} title="Editar Ofício" width={500}>
+            {editOf && <OficioForm inicial={editOf} propostas={propostas} onSave={handleEdit} onCancel={() => setEditOf(null)} />}
+          </Modal>
+          {delOf && <Modal open onClose={() => setDelOf(null)} title="Confirmar Exclusão" width={420}>
+            <div style={{ padding: "0 28px 28px" }}>
+              <p style={{ fontSize: 14, color: "#94a3b8", lineHeight: 1.6, margin: 0 }}>Excluir o ofício <strong>{delOf.sigad || "sem SIGAD"}</strong>?</p>
+              <div style={S.fActions}><button style={S.btnSec} onClick={() => setDelOf(null)}>Cancelar</button><button style={{ ...S.btnPri, background: "#dc2626" }} onClick={handleDel}>Excluir</button></div>
+            </div>
+          </Modal>}
+        </>
+      );
+    }
+
+    function OficioForm({ inicial, propostas, onSave, onCancel }) {
+      const [f, setF] = useState(inicial || { sigad: "", propostaId: propostas[0]?.id || "", status: "aguardando", oficioComprep: "", observacoes: "" });
+      const ch = (k, v) => setF(p => ({ ...p, [k]: v }));
+      const ok = f.sigad && f.propostaId;
+
+      return (
+        <div style={{ padding: "0 28px 28px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 18 }}>
+            <FG label="Nº SIGAD *"><input style={S.inp} value={f.sigad} onChange={e => ch("sigad", e.target.value)} placeholder="Ex: 64000.012345/2026-01" /></FG>
+            <FG label="Proposta Vinculada *">
+              <select style={S.inp} value={f.propostaId} onChange={e => ch("propostaId", e.target.value)}>
+                {propostas.length === 0 && <option value="">— Nenhuma proposta cadastrada —</option>}
+                {propostas.map(p => (
+                  <option key={p.id} value={p.id}>{p.titulo || "Proposta sem título"} ({fmtDate(p.dataCriacao)})</option>
+                ))}
+              </select>
+            </FG>
+            <FG label="Status de Autorização">
+              <select style={S.inp} value={f.status} onChange={e => ch("status", e.target.value)}>
+                {Object.entries(OFICIO_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </select>
+            </FG>
+            {f.status === "autorizado" && (
+              <FG label="Nº Ofício COMPREP"><input style={S.inp} value={f.oficioComprep || ""} onChange={e => ch("oficioComprep", e.target.value)} placeholder="Ex: Of nº 001-S1/COMPREP/2026" /></FG>
+            )}
+            <FG label="Observações"><textarea style={{ ...S.inp, minHeight: 64, resize: "vertical" }} value={f.observacoes} onChange={e => ch("observacoes", e.target.value)} placeholder="Informações adicionais..." /></FG>
+          </div>
+          <div style={S.fActions}><button style={S.btnSec} onClick={onCancel}>Cancelar</button><button style={{ ...S.btnPri, opacity: ok ? 1 : .5 }} disabled={!ok} onClick={() => ok && onSave(f)}>{inicial ? "Salvar" : "Registrar"}</button></div>
+        </div>
+      );
+    }
+
+    /* ═══════════════════════════════════════
+       PAG TAB
+       ═══════════════════════════════════════ */
+    function PagTab({ propostas, setPropostas }) {
+      const [saved, setSaved] = useState(false);
+
+      const updateMilPag = (propostaId, milId, field, value) => {
+        setSaved(false);
+        setPropostas(prev => prev.map(p => p.id !== propostaId ? p : {
+          ...p,
+          militares: p.militares.map(m => m.id === milId ? { ...m, [field]: value } : m)
+        }));
+      };
+
+      const handleSave = () => {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+      };
+
+      const allMil = propostas.flatMap(p => (p.militares || []).map(m => ({ ...m, _propId: p.id, _propTitulo: p.titulo })));
+      const totalPagOk = allMil.filter(m => m.numeroPag).length;
+
+      return (
+        <>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#f1f5f9" }}>Abertura de PAG Individual</h2>
+              <p style={{ margin: "4px 0 0", fontSize: 13, color: "#64748b" }}>Controle de SIGAD e número de PAG por militar</p>
+            </div>
+            <button
+              style={{ ...S.btnPri, background: saved ? "linear-gradient(135deg,#16a34a,#22c55e)" : "linear-gradient(135deg,#1d4ed8,#2563eb)", transition: "all .3s" }}
+              onClick={handleSave}
+            >
+              {saved ? I.check : I.file}
+              <span>{saved ? "Salvo!" : "Salvar"}</span>
+            </button>
+          </div>
+
+          <div style={{ ...S.statsGrid, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", marginBottom: 22 }}>
+            {[
+              { label: "Total de Militares", value: allMil.length, color: "#6366f1" },
+              { label: "PAGs Registrados", value: totalPagOk, color: "#22c55e" },
+              { label: "PAGs Pendentes", value: allMil.length - totalPagOk, color: "#f59e0b" },
+            ].map((c, i) => (
+              <div key={i} style={S.statCard}>
+                <div style={{ ...S.statIcon, background: c.color + "18", color: c.color }}>{I.file}</div>
+                <div><div style={S.statVal}>{c.value}</div><div style={S.statLbl}>{c.label}</div></div>
+              </div>
+            ))}
+          </div>
+
+          {allMil.length === 0 ? (
+            <div style={{ ...S.card, ...S.empty }}>
+              <div style={{ color: "#334155", display: "flex", justifyContent: "center", marginBottom: 12 }}>{I.file}</div>
+              <p style={{ fontSize: 15, fontWeight: 600, color: "#94a3b8", margin: "0 0 6px" }}>Nenhum militar nas propostas</p>
+              <p style={{ fontSize: 13, color: "#475569", margin: 0 }}>Cadastre militares em uma proposta para gerenciar os PAGs aqui.</p>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 16 }}>
+              {propostas.filter(p => p.militares?.length > 0).map(prop => {
+                const pagsDone = prop.militares.filter(m => m.numeroPag).length;
+                return (
+                  <div key={prop.id} style={S.card}>
+                    <div style={{ padding: "14px 22px", borderBottom: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(59,130,246,0.04)" }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "#93c5fd" }}>{prop.titulo || "Proposta sem título"}</span>
+                      <span style={{
+                        fontSize: 12, fontWeight: 700, padding: "3px 10px", borderRadius: 5,
+                        color: pagsDone === prop.militares.length ? "#22c55e" : "#f59e0b",
+                        background: pagsDone === prop.militares.length ? "rgba(34,197,94,0.12)" : "rgba(245,158,11,0.12)",
+                      }}>
+                        {pagsDone}/{prop.militares.length} PAGs
+                      </span>
+                    </div>
+                    <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 10 }}>
+                      {prop.militares.map(mil => {
+                        const done = !!mil.numeroPag;
+                        return (
+                          <div key={mil.id} style={{ background: "#0c111b", border: `1px solid ${done ? "rgba(34,197,94,0.25)" : "#1e293b"}`, borderRadius: 12, padding: "14px 16px", transition: "border-color .2s" }}>
+                            <div style={{ display: "flex", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 200, flex: "1 1 200px" }}>
+                                <div style={S.avatar}>{mil.postoGrad?.charAt(0)}</div>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontWeight: 600, color: "#f1f5f9", fontSize: 13 }}>{mil.postoGrad} {mil.nomeGuerra}</div>
+                                  <div style={{ fontSize: 11, color: "#64748b" }}>{mil.nomeCompleto}</div>
+                                </div>
+                                {done ? (
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: "#22c55e", background: "rgba(34,197,94,0.12)", padding: "3px 10px", borderRadius: 5, display: "flex", alignItems: "center", gap: 4 }}>
+                                    {I.check} Registrado
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: 11, fontWeight: 600, color: "#f59e0b", background: "rgba(245,158,11,0.12)", padding: "3px 10px", borderRadius: 5 }}>
+                                    Pendente
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ display: "flex", gap: 12, flex: "2 1 300px", flexWrap: "wrap" }}>
+                                <FG label="Nº SIGAD Abertura de PAG" flex>
+                                  <input style={S.inp} value={mil.sigadPag || ""} onChange={e => updateMilPag(prop.id, mil.id, "sigadPag", e.target.value)} placeholder="Nº SIGAD do ofício" />
+                                </FG>
+                                <FG label="Nº do PAG" flex>
+                                  <input style={S.inp} value={mil.numeroPag || ""} onChange={e => updateMilPag(prop.id, mil.id, "numeroPag", e.target.value)} placeholder="Nº PAG gerado" />
+                                </FG>
+                                <FG label="Nº Subprocesso" flex>
+                                  <input style={S.inp} value={mil.subprocesso || ""} onChange={e => updateMilPag(prop.id, mil.id, "subprocesso", e.target.value)} placeholder="Ex: 12345" />
+                                </FG>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      );
+    }
+
+    /* ═══════════════════════════════════════
+       PORTARIA TAB
+       ═══════════════════════════════════════ */
+    function PortariaTab({ propostas, setPropostas }) {
+      const [saved, setSaved] = useState(false);
+
+      const updateMilField = (propostaId, milId, field, value) => {
+        setSaved(false);
+        setPropostas(prev => prev.map(p => p.id !== propostaId ? p : {
+          ...p,
+          militares: p.militares.map(m => m.id === milId ? { ...m, [field]: value } : m)
+        }));
+      };
+
+      const handleSave = () => {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+      };
+
+      const allMil = propostas.flatMap(p => (p.militares || []).map(m => ({ ...m, _propId: p.id })));
+      const totalComPortaria = allMil.filter(m => m.portaria).length;
+      const totalComBoletim = allMil.filter(m => m.boletim).length;
+
+      return (
+        <>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#f1f5f9" }}>Portarias de Comissionamento</h2>
+              <p style={{ margin: "4px 0 0", fontSize: 13, color: "#64748b" }}>Controle de portarias, itens 9449 e publicação em Boletim</p>
+            </div>
+            <button
+              style={{ ...S.btnPri, background: saved ? "linear-gradient(135deg,#16a34a,#22c55e)" : "linear-gradient(135deg,#1d4ed8,#2563eb)", transition: "all .3s" }}
+              onClick={handleSave}
+            >
+              {saved ? I.check : I.file}
+              <span>{saved ? "Salvo!" : "Salvar"}</span>
+            </button>
+          </div>
+
+          <div style={{ ...S.statsGrid, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", marginBottom: 22 }}>
+            {[
+              { label: "Total de Militares", value: allMil.length, color: "#6366f1" },
+              { label: "Com Portaria", value: totalComPortaria, color: "#8b5cf6" },
+              { label: "Publicados em Bol", value: totalComBoletim, color: "#22c55e" },
+              { label: "Pendentes", value: allMil.length - totalComBoletim, color: "#f59e0b" },
+            ].map((c, i) => (
+              <div key={i} style={S.statCard}>
+                <div style={{ ...S.statIcon, background: c.color + "18", color: c.color }}>{I.stamp}</div>
+                <div><div style={S.statVal}>{c.value}</div><div style={S.statLbl}>{c.label}</div></div>
+              </div>
+            ))}
+          </div>
+
+          {allMil.length === 0 ? (
+            <div style={{ ...S.card, ...S.empty }}>
+              <div style={{ color: "#334155", display: "flex", justifyContent: "center", marginBottom: 12 }}>{I.stamp}</div>
+              <p style={{ fontSize: 15, fontWeight: 600, color: "#94a3b8", margin: "0 0 6px" }}>Nenhum militar nas propostas</p>
+              <p style={{ fontSize: 13, color: "#475569", margin: 0 }}>Cadastre militares em uma proposta para registrar portarias aqui.</p>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 16 }}>
+              {propostas.filter(p => p.militares?.length > 0).map(prop => {
+                const portOk = prop.militares.filter(m => m.portaria).length;
+                const bolOk = prop.militares.filter(m => m.boletim).length;
+                return (
+                  <div key={prop.id} style={S.card}>
+                    <div style={{ padding: "14px 22px", borderBottom: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(139,92,246,0.04)" }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "#a78bfa" }}>{prop.titulo || "Proposta sem título"}</span>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: "#a78bfa", background: "rgba(139,92,246,0.12)", padding: "3px 8px", borderRadius: 4 }}>
+                          Port. {portOk}/{prop.militares.length}
+                        </span>
+                        <span style={{
+                          fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 4,
+                          color: bolOk === prop.militares.length ? "#22c55e" : "#f59e0b",
+                          background: bolOk === prop.militares.length ? "rgba(34,197,94,0.12)" : "rgba(245,158,11,0.12)",
+                        }}>
+                          Bol. {bolOk}/{prop.militares.length}
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 10 }}>
+                      {prop.militares.map(mil => {
+                        const done = !!mil.portaria;
+                        const published = !!mil.boletim;
+                        return (
+                          <div key={mil.id} style={{ background: "#0c111b", border: `1px solid ${published ? "rgba(34,197,94,0.25)" : done ? "rgba(139,92,246,0.25)" : "#1e293b"}`, borderRadius: 12, padding: "14px 16px", transition: "border-color .2s" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                              <div style={S.avatar}>{mil.postoGrad?.charAt(0)}</div>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 600, color: "#f1f5f9", fontSize: 13 }}>{mil.postoGrad} {mil.nomeGuerra}</div>
+                                <div style={{ fontSize: 11, color: "#64748b" }}>{mil.nomeCompleto}</div>
+                              </div>
+                              {published ? (
+                                <span style={{ fontSize: 11, fontWeight: 700, color: "#22c55e", background: "rgba(34,197,94,0.12)", padding: "3px 10px", borderRadius: 5, display: "flex", alignItems: "center", gap: 4 }}>
+                                  {I.check} Publicado
+                                </span>
+                              ) : done ? (
+                                <span style={{ fontSize: 11, fontWeight: 700, color: "#a78bfa", background: "rgba(139,92,246,0.12)", padding: "3px 10px", borderRadius: 5 }}>
+                                  Portaria OK
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: 11, fontWeight: 600, color: "#f59e0b", background: "rgba(245,158,11,0.12)", padding: "3px 10px", borderRadius: 5 }}>
+                                  Pendente
+                                </span>
+                              )}
+                            </div>
+                            <FG label="Portaria de Comissionamento">
+                              <input style={S.inp} value={mil.portaria || ""} onChange={e => updateMilField(prop.id, mil.id, "portaria", e.target.value)} placeholder="PORTARIA BACO Nº XX/1GDAAE_CGEP, DE XX DE JANEIRO DE 20XX" />
+                            </FG>
+                            {mil.portaria && (
+                              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
+                                <div style={S.row}>
+                                  <FG label="Item Portaria 9449" flex>
+                                    <select style={S.inp} value={mil.item9449 || "pendente"} onChange={e => updateMilField(prop.id, mil.id, "item9449", e.target.value)}>
+                                      <option value="pendente">Pendente</option>
+                                      <option value="ok">OK — Conforme</option>
+                                      <option value="ajuste">Necessita Ajuste</option>
+                                    </select>
+                                  </FG>
+                                  <FG label="Boletim Interno Ostensivo" flex>
+                                    <input style={S.inp} value={mil.boletim || ""} onChange={e => updateMilField(prop.id, mil.id, "boletim", e.target.value)} placeholder="Bol Int Ost Nº XX, de XX MAR 2026" />
+                                  </FG>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      );
+    }
+
+    /* ═══════════════════════════════════════
+       NUMERÁRIO TAB
+       ═══════════════════════════════════════ */
+    const NUMERARIO_STATUS = {
+      pendente: { label: "Pendente", color: "#f59e0b", bg: "rgba(245,158,11,0.12)" },
+      concedido: { label: "Concedido", color: "#22c55e", bg: "rgba(34,197,94,0.12)" },
+      negado: { label: "Negado", color: "#ef4444", bg: "rgba(239,68,68,0.12)" },
+    };
+
+    function NumerarioTab({ propostas, setPropostas }) {
+      const [saved, setSaved] = useState(false);
+
+      const updateMilNum = (propostaId, milId, field, value) => {
+        setSaved(false);
+        setPropostas(prev => prev.map(p => p.id !== propostaId ? p : {
+          ...p,
+          militares: p.militares.map(m => m.id === milId ? { ...m, [field]: value } : m)
+        }));
+      };
+
+      const handleSave = () => {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+      };
+
+      const propostasComBol = propostas.map(p => ({
+        ...p,
+        militares: (p.militares || []).filter(m => m.portaria && m.boletim)
+      })).filter(p => p.militares.length > 0);
+
+      const allMil = propostasComBol.flatMap(p => p.militares);
+      const totalConcedido = allMil.filter(m => m.numStatus === "concedido").length;
+      const totalPublicado = allMil.filter(m => m.numBoletim).length;
+
+      return (
+        <>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#f1f5f9" }}>Numerário — Ajuda de Custo</h2>
+              <p style={{ margin: "4px 0 0", fontSize: 13, color: "#64748b" }}>Concessão (1378) — Militares com portaria publicada em boletim</p>
+            </div>
+            <button
+              style={{ ...S.btnPri, background: saved ? "linear-gradient(135deg,#16a34a,#22c55e)" : "linear-gradient(135deg,#1d4ed8,#2563eb)", transition: "all .3s" }}
+              onClick={handleSave}
+            >
+              {saved ? I.check : I.file}
+              <span>{saved ? "Salvo!" : "Salvar"}</span>
+            </button>
+          </div>
+
+          <div style={{ ...S.statsGrid, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", marginBottom: 22 }}>
+            {[
+              { label: "Militares Elegíveis", value: allMil.length, color: "#6366f1" },
+              { label: "Concedidos", value: totalConcedido, color: "#22c55e" },
+              { label: "Publicados em Bol", value: totalPublicado, color: "#3b82f6" },
+              { label: "Pendentes", value: allMil.length - totalConcedido, color: "#f59e0b" },
+            ].map((c, i) => (
+              <div key={i} style={S.statCard}>
+                <div style={{ ...S.statIcon, background: c.color + "18", color: c.color }}>{I.coin}</div>
+                <div><div style={S.statVal}>{c.value}</div><div style={S.statLbl}>{c.label}</div></div>
+              </div>
+            ))}
+          </div>
+
+          {allMil.length === 0 ? (
+            <div style={{ ...S.card, ...S.empty }}>
+              <div style={{ color: "#334155", display: "flex", justifyContent: "center", marginBottom: 12 }}>{I.coin}</div>
+              <p style={{ fontSize: 15, fontWeight: 600, color: "#94a3b8", margin: "0 0 6px" }}>Nenhum militar elegível</p>
+              <p style={{ fontSize: 13, color: "#475569", margin: 0 }}>Militares aparecerão aqui após terem a portaria publicada em boletim.</p>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 16 }}>
+              {propostasComBol.map(prop => {
+                const okCount = prop.militares.filter(m => m.numBoletim).length;
+                return (
+                  <div key={prop.id} style={S.card}>
+                    <div style={{ padding: "14px 22px", borderBottom: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(234,179,8,0.04)" }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "#fbbf24" }}>{prop.titulo || "Proposta sem título"}</span>
+                      <span style={{
+                        fontSize: 12, fontWeight: 700, padding: "3px 10px", borderRadius: 5,
+                        color: okCount === prop.militares.length ? "#22c55e" : "#f59e0b",
+                        background: okCount === prop.militares.length ? "rgba(34,197,94,0.12)" : "rgba(245,158,11,0.12)",
+                      }}>
+                        {okCount}/{prop.militares.length}
+                      </span>
+                    </div>
+                    <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 10 }}>
+                      {prop.militares.map(mil => {
+                        const stCfg = NUMERARIO_STATUS[mil.numStatus || "pendente"] || NUMERARIO_STATUS.pendente;
+                        return (
+                          <div key={mil.id} style={{ background: "#0c111b", border: `1px solid ${mil.numBoletim ? "rgba(34,197,94,0.25)" : "#1e293b"}`, borderRadius: 12, padding: "14px 16px", transition: "border-color .2s" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                              <div style={S.avatar}>{mil.postoGrad?.charAt(0)}</div>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 600, color: "#f1f5f9", fontSize: 13 }}>{mil.postoGrad} {mil.nomeGuerra}</div>
+                                <div style={{ fontSize: 11, color: "#64748b" }}>{mil.nomeCompleto}</div>
+                              </div>
+                              <span style={{ ...S.badge, color: stCfg.color, background: stCfg.bg }}>{stCfg.label}</span>
+                            </div>
+                            <div style={S.row}>
+                              <FG label="Status Concessão (1378)" flex>
+                                <select style={S.inp} value={mil.numStatus || "pendente"} onChange={e => updateMilNum(prop.id, mil.id, "numStatus", e.target.value)}>
+                                  {Object.entries(NUMERARIO_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                                </select>
+                              </FG>
+                              <FG label="Boletim de Publicação" flex>
+                                <input style={S.inp} value={mil.numBoletim || ""} onChange={e => updateMilNum(prop.id, mil.id, "numBoletim", e.target.value)} placeholder="Bol Int Ost Nº XX, de XX MAR 2026" />
+                              </FG>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      );
+    }
+
+    /* ═══════════════════════════════════════
+       ORDENS DE SERVIÇO TAB
+       ═══════════════════════════════════════ */
+    function emptyOS() {
+      return { id: uid(), numero: "", missaoCurso: "", localidade: "", dataInicio: "", dataFim: "" };
+    }
+
+    function OSTab({ propostas, setPropostas, oficios }) {
+      const [saved, setSaved] = useState(false);
+
+      const getComprep = (propId) => {
+        const of = oficios.find(o => o.propostaId === propId && o.status === "autorizado" && o.oficioComprep);
+        return of?.oficioComprep || null;
+      };
+
+      const updateOS = (propostaId, milId, osId, field, value) => {
+        setSaved(false);
+        setPropostas(prev => prev.map(p => p.id !== propostaId ? p : {
+          ...p,
+          militares: p.militares.map(m => m.id !== milId ? m : {
+            ...m,
+            ordensServico: (m.ordensServico || []).map(os => os.id === osId ? { ...os, [field]: value } : os)
+          })
+        }));
+      };
+
+      const addOS = (propostaId, milId) => {
+        setSaved(false);
+        setPropostas(prev => prev.map(p => p.id !== propostaId ? p : {
+          ...p,
+          militares: p.militares.map(m => m.id !== milId ? m : {
+            ...m,
+            ordensServico: [...(m.ordensServico || []), emptyOS()]
+          })
+        }));
+      };
+
+      const removeOS = (propostaId, milId, osId) => {
+        setSaved(false);
+        setPropostas(prev => prev.map(p => p.id !== propostaId ? p : {
+          ...p,
+          militares: p.militares.map(m => m.id !== milId ? m : {
+            ...m,
+            ordensServico: (m.ordensServico || []).filter(os => os.id !== osId)
+          })
+        }));
+      };
+
+      const handleSave = () => {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+      };
+
+      const allMil = propostas.flatMap(p => (p.militares || []).map(m => ({ ...m, _propId: p.id })));
+      const totalOS = allMil.reduce((s, m) => s + (m.ordensServico?.length || 0), 0);
+      const milComOS = allMil.filter(m => m.ordensServico?.length > 0).length;
+
+      return (
+        <>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#f1f5f9" }}>Ordens de Serviço</h2>
+              <p style={{ margin: "4px 0 0", fontSize: 13, color: "#64748b" }}>Controle de OS individuais por militar — missões e cursos</p>
+            </div>
+            <button
+              style={{ ...S.btnPri, background: saved ? "linear-gradient(135deg,#16a34a,#22c55e)" : "linear-gradient(135deg,#1d4ed8,#2563eb)", transition: "all .3s" }}
+              onClick={handleSave}
+            >
+              {saved ? I.check : I.file}
+              <span>{saved ? "Salvo!" : "Salvar"}</span>
+            </button>
+          </div>
+
+          <div style={{ ...S.statsGrid, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", marginBottom: 22 }}>
+            {[
+              { label: "Total de Militares", value: allMil.length, color: "#6366f1" },
+              { label: "Militares com OS", value: milComOS, color: "#22c55e" },
+              { label: "Total de OS", value: totalOS, color: "#3b82f6" },
+              { label: "Sem OS", value: allMil.length - milComOS, color: "#f59e0b" },
+            ].map((c, i) => (
+              <div key={i} style={S.statCard}>
+                <div style={{ ...S.statIcon, background: c.color + "18", color: c.color }}>{I.clipboard}</div>
+                <div><div style={S.statVal}>{c.value}</div><div style={S.statLbl}>{c.label}</div></div>
+              </div>
+            ))}
+          </div>
+
+          {allMil.length === 0 ? (
+            <div style={{ ...S.card, ...S.empty }}>
+              <div style={{ color: "#334155", display: "flex", justifyContent: "center", marginBottom: 12 }}>{I.clipboard}</div>
+              <p style={{ fontSize: 15, fontWeight: 600, color: "#94a3b8", margin: "0 0 6px" }}>Nenhum militar nas propostas</p>
+              <p style={{ fontSize: 13, color: "#475569", margin: 0 }}>Cadastre militares em uma proposta para gerenciar as OS aqui.</p>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 16 }}>
+              {propostas.filter(p => p.militares?.length > 0).map(prop => {
+                const comprep = getComprep(prop.id);
+                return (
+                <div key={prop.id} style={S.card}>
+                  <div style={{ padding: "14px 22px", borderBottom: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, background: "rgba(56,189,248,0.04)" }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#7dd3fc" }}>{prop.titulo || "Proposta sem título"}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 11, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>COMPREP:</span>
+                      {comprep ? (
+                        <span style={{ fontSize: 13, fontWeight: 700, color: "#22c55e", fontFamily: "'JetBrains Mono','Fira Code',monospace" }}>{comprep}</span>
+                      ) : (
+                        <span style={{ fontSize: 12, color: "#f59e0b", fontStyle: "italic" }}>Preencha na aba Ofícios</span>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 14 }}>
+                    {prop.militares.map(mil => {
+                      const oss = mil.ordensServico || [];
+                      
+                      const totalDiasModulos = (mil.modulos || []).reduce((s, m) => s + diffDays(m.dataInicio, m.dataFim), 0);
+                      const targetDias = parseInt(mil.diasMinimos) || totalDiasModulos;
+                      const diasCumpridos = calcDiasOS(oss);
+                      const diasRestantes = Math.max(0, targetDias - diasCumpridos);
+                      const isFechado = targetDias > 0 && diasCumpridos >= targetDias;
+
+                      return (
+                        <div key={mil.id} style={{ background: "#0c111b", border: "1px solid #1e293b", borderRadius: 12, padding: 16 }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <div style={S.avatar}>{mil.postoGrad?.charAt(0)}</div>
+                              <div>
+                                <div style={{ fontWeight: 600, color: "#f1f5f9", fontSize: 13 }}>{mil.postoGrad} {mil.nomeGuerra}</div>
+                                <div style={{ fontSize: 11, color: "#64748b" }}>{mil.nomeCompleto}</div>
+                                
+                                <div style={{ display: "flex", gap: 12, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
+                                  <span style={{ fontSize: 11, color: "#94a3b8" }}>Meta: <strong style={{color: "#f1f5f9"}}>{targetDias}d</strong></span>
+                                  <span style={{ fontSize: 11, color: "#94a3b8" }}>Cumpridos: <strong style={{color: "#3b82f6"}}>{diasCumpridos}d</strong></span>
+                                  <span style={{ fontSize: 11, color: "#94a3b8" }}>Restantes: <strong style={{color: isFechado ? "#22c55e" : "#f59e0b"}}>{diasRestantes}d</strong></span>
+                                  {isFechado && <span style={{ fontSize: 10, fontWeight: 700, color: "#22c55e", background: "rgba(34,197,94,0.12)", padding: "2px 6px", borderRadius: 4 }}>✔ FECHADO</span>}
+                                </div>
+                              </div>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <span style={{ fontSize: 11, fontWeight: 600, color: oss.length > 0 ? "#22c55e" : "#64748b", background: oss.length > 0 ? "rgba(34,197,94,0.12)" : "rgba(100,116,139,0.12)", padding: "3px 10px", borderRadius: 5 }}>
+                                {oss.length} OS
+                              </span>
+                              <button style={S.btnGhost} onClick={() => addOS(prop.id, mil.id)}>{I.plus} Nova OS</button>
+                            </div>
+                          </div>
+
+                          {oss.length > 0 && (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                              {oss.map((os, osIdx) => (
+                                <div key={os.id} style={{ background: "#111827", border: "1px solid #1e293b", borderRadius: 10, padding: 14 }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                                    <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b" }}>OS {osIdx + 1}</span>
+                                    <button style={{ ...S.actBtn, color: "#ef4444", padding: 3 }} onClick={() => removeOS(prop.id, mil.id, os.id)}>{I.x}</button>
+                                  </div>
+                                  <div style={S.row}>
+                                    <FG label="Nº da Ordem de Serviço" flex>
+                                      <input style={S.inp} value={os.numero || ""} onChange={e => updateOS(prop.id, mil.id, os.id, "numero", e.target.value)} placeholder="Nº da OS" />
+                                    </FG>
+                                    <FG label="Missão / Curso" flex>
+                                      <input style={S.inp} value={os.missaoCurso || ""} onChange={e => updateOS(prop.id, mil.id, os.id, "missaoCurso", e.target.value)} placeholder="Ex: CADOM, OOM-III, Op Ágata..." />
+                                    </FG>
+                                  </div>
+                                  <div style={{ ...S.row, marginTop: 10 }}>
+                                    <FG label="Localidade" flex>
+                                      <input style={S.inp} value={os.localidade || ""} onChange={e => updateOS(prop.id, mil.id, os.id, "localidade", e.target.value)} placeholder="Ex: Brasília-DF" />
+                                    </FG>
+                                    <FG label="Início" flex>
+                                      <input type="date" style={S.inp} value={os.dataInicio || ""} onChange={e => updateOS(prop.id, mil.id, os.id, "dataInicio", e.target.value)} />
+                                    </FG>
+                                    <FG label="Término" flex>
+                                      <input type="date" style={S.inp} value={os.dataFim || ""} onChange={e => updateOS(prop.id, mil.id, os.id, "dataFim", e.target.value)} />
+                                    </FG>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )})}
+            </div>
+          )}
+        </>
+      );
+    }
+
+    /* ═══════════════════════════════════════
+       MAIN APP
+       ═══════════════════════════════════════ */
+    function App() {
+      const [data, setData] = useState({ militares: [], propostas: [], oficios: [] });
+      const [loaded, setLoaded] = useState(false);
+      const [tab, setTab] = useState("dashboard");
+      const [user, setUser] = useState(null);
+      const [authLoading, setAuthLoading] = useState(true);
+
+      // Listener de Autenticação do Firebase
+      useEffect(() => {
+        const unsubscribe = auth.onAuthStateChanged((u) => {
+          setUser(u);
+          setAuthLoading(false);
+        });
+        return () => unsubscribe();
+      }, []);
+
+      // Só carrega os dados do banco se o usuário estiver logado
+      useEffect(() => {
+        if (!user) return; 
+        (async () => {
+          try {
+            const r = await window.storage.get(STORAGE_KEY);
+            if (r?.value) {
+              setData(JSON.parse(r.value));
+            }
+          } catch (e) { console.log("Erro ao inicializar dados:", e); }
+          setLoaded(true);
+        })();
+      }, [user]);
+
+      useEffect(() => {
+        if (!loaded || !user) return;
+        (async () => {
+          try { 
+            await window.storage.set(STORAGE_KEY, JSON.stringify(data)); 
+          } catch (e) { console.error(e); }
+        })();
+      }, [data, loaded, user]);
+
+      const setPropostas = fn => setData(d => ({ ...d, propostas: typeof fn === "function" ? fn(d.propostas) : fn }));
+      const setOficios = fn => setData(d => ({ ...d, oficios: typeof fn === "function" ? fn(d.oficios || []) : fn }));
+
+      // Telas de Carregamento e Bloqueio
+      if (authLoading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: "#0c111b" }}><div style={{ width: 36, height: 36, border: "3px solid #1e293b", borderTop: "3px solid #3b82f6", borderRadius: "50%", animation: "spin .8s linear infinite" }} /></div>;
+      
+      if (!user) return <LoginPage />;
+      
+      if (!loaded) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: "#0c111b" }}><div style={{ width: 36, height: 36, border: "3px solid #1e293b", borderTop: "3px solid #3b82f6", borderRadius: "50%", animation: "spin .8s linear infinite" }} /></div>;
+
+      return (
+        <div style={S.root}>
+          <style>{`
+            @keyframes spin { to { transform: rotate(360deg) } }
+            input:focus, select:focus, textarea:focus { border-color: #3b82f6 !important; }
+            button:hover { opacity: 0.85; }
+            ::-webkit-scrollbar { width: 6px; height: 6px; }
+            ::-webkit-scrollbar-track { background: #0c111b; }
+            ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+          `}</style>
+
+          <header style={S.header}>
+            <div style={S.hInner}>
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                <div style={S.logo}>{I.shield}</div>
+                <div>
+                  <h1 style={{ fontSize: 17, fontWeight: 700, color: "#f1f5f9", margin: 0, letterSpacing: "-.02em" }}>Controle de Comissionamento</h1>
+                  <p style={{ fontSize: 11, color: "#64748b", margin: 0, fontWeight: 500, letterSpacing: ".04em", textTransform: "uppercase" }}>1º Grupo de Defesa Antiaérea</p>
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+                <div style={S.tabs}>
+                  {[
+                    { key: "dashboard", label: "Dashboard", icon: I.chart },
+                    { key: "consulta", label: "Consulta", icon: I.search },
+                    { key: "propostas", label: "Propostas", icon: I.doc },
+                    { key: "oficios", label: "Ofícios", icon: I.mail },
+                    { key: "pag", label: "PAG", icon: I.file },
+                    { key: "portaria", label: "Portaria", icon: I.stamp },
+                    { key: "numerario", label: "Numerário", icon: I.coin },
+                    { key: "os", label: "Ordens Serviço", icon: I.clipboard },
+                  ].map(t => (
+                    <button key={t.key} style={{ ...S.tab, ...(tab === t.key ? S.tabActive : {}) }} onClick={() => setTab(t.key)}>
+                      {t.icon}<span>{t.label}</span>
+                    </button>
+                  ))}
+                </div>
+                
+                {/* BOTÃO DE LOGOUT */}
+                <button 
+                  onClick={() => auth.signOut()} 
+                  style={{ ...S.btnSec, padding: "8px 14px", fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, borderColor: 'rgba(239,68,68,0.5)', color: '#ef4444' }}
+                >
+                  {I.logout} Sair
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <main style={S.main}>
+            {tab === "dashboard" && <DashboardTab propostas={data.propostas} />}
+            {tab === "consulta" && <ConsultaTab propostas={data.propostas} oficios={data.oficios || []} />}
+            {tab === "propostas" && <PropostasTab propostas={data.propostas} setPropostas={setPropostas} />}
+            {tab === "oficios" && <OficiosTab oficios={data.oficios || []} setOficios={setOficios} propostas={data.propostas} />}
+            {tab === "pag" && <PagTab propostas={data.propostas} setPropostas={setPropostas} />}
+            {tab === "portaria" && <PortariaTab propostas={data.propostas} setPropostas={setPropostas} />}
+            {tab === "numerario" && <NumerarioTab propostas={data.propostas} setPropostas={setPropostas} />}
+            {tab === "os" && <OSTab propostas={data.propostas} setPropostas={setPropostas} oficios={data.oficios || []} />}
+          </main>
+        </div>
+      );
+    }
+
+    /* ─── Styles ─── */
+    const S = {
+      root: { fontFamily: "'DM Sans','Segoe UI',system-ui,sans-serif", background: "#0c111b", minHeight: "100vh", color: "#e2e8f0" },
+      header: { background: "linear-gradient(135deg,#0f172a,#1a2744)", borderBottom: "1px solid rgba(56,189,248,0.12)", padding: "0 24px", position: "sticky", top: 0, zIndex: 50, backdropFilter: "blur(12px)" },
+      hInner: { maxWidth: 1300, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0", flexWrap: "wrap", gap: 12 },
+      logo: { width: 44, height: 44, borderRadius: 10, background: "linear-gradient(135deg,#1d4ed8,#2563eb)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", boxShadow: "0 0 20px rgba(37,99,235,0.35)" },
+      tabs: { display: "flex", gap: 4, background: "#0c111b", borderRadius: 12, padding: 4, flexWrap: "wrap" },
+      tab: { display: "flex", alignItems: "center", gap: 7, padding: "8px 16px", borderRadius: 10, background: "transparent", border: "none", color: "#64748b", fontSize: 13, fontWeight: 500, cursor: "pointer", transition: "all .2s", whiteSpace: "nowrap" },
+      tabActive: { background: "#1e293b", color: "#f1f5f9", fontWeight: 600 },
+      main: { maxWidth: 1300, margin: "0 auto", padding: "24px 24px 48px" },
+
+      statsGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 14, marginBottom: 22 },
+      statCard: { background: "linear-gradient(145deg,#141c2e,#111827)", border: "1px solid #1e293b", borderRadius: 14, padding: "18px 20px", display: "flex", alignItems: "center", gap: 14 },
+      statIcon: { width: 42, height: 42, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+      statVal: { fontSize: 24, fontWeight: 800, color: "#f8fafc", lineHeight: 1, letterSpacing: "-.03em" },
+      statLbl: { fontSize: 11, color: "#64748b", marginTop: 3, fontWeight: 500 },
+
+      card: { background: "linear-gradient(145deg,#141c2e,#111827)", border: "1px solid #1e293b", borderRadius: 16, overflow: "hidden" },
+      toolbar: { padding: "16px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", borderBottom: "1px solid #1e293b" },
+      searchWrap: { position: "relative", flex: "1 1 260px", minWidth: 180 },
+      searchIco: { position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#475569", display: "flex" },
+      searchIn: { width: "100%", boxSizing: "border-box", padding: "9px 14px 9px 36px", background: "#0f172a", border: "1px solid #1e293b", borderRadius: 10, color: "#e2e8f0", fontSize: 13, outline: "none" },
+      filterGrp: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" },
+      sel: { padding: "9px 12px", background: "#0f172a", border: "1px solid #1e293b", borderRadius: 10, color: "#e2e8f0", fontSize: 13, outline: "none", cursor: "pointer" },
+      table: { width: "100%", borderCollapse: "collapse" },
+      th: { padding: "11px 16px", fontSize: 10, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: ".06em", textAlign: "left", borderBottom: "1px solid #1e293b", whiteSpace: "nowrap" },
+      tr: { borderBottom: "1px solid rgba(30,41,59,0.5)", cursor: "default", transition: "background .15s" },
+      td: { padding: "12px 16px", fontSize: 13, verticalAlign: "middle" },
+      avatar: { width: 34, height: 34, borderRadius: 8, background: "linear-gradient(135deg,#1e3a5f,#1e40af)", color: "#93c5fd", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flexShrink: 0 },
+      mono: { fontFamily: "'JetBrains Mono','Fira Code',monospace", fontSize: 12, color: "#94a3b8", background: "rgba(30,41,59,0.6)", padding: "3px 7px", borderRadius: 5 },
+      dTag: { display: "inline-block", padding: "3px 9px", borderRadius: 5, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" },
+      badge: { display: "inline-block", padding: "3px 9px", borderRadius: 5, fontSize: 12, fontWeight: 600 },
+      tfoot: { padding: "11px 20px", fontSize: 12, color: "#475569", borderTop: "1px solid #1e293b" },
+      empty: { padding: "56px 24px", textAlign: "center" },
+      actBtn: { background: "transparent", border: "1px solid transparent", borderRadius: 8, padding: 6, cursor: "pointer", color: "#64748b", display: "flex", alignItems: "center", transition: "all .15s" },
+
+      btnPri: { display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 18px", background: "linear-gradient(135deg,#1d4ed8,#2563eb)", border: "none", borderRadius: 10, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", boxShadow: "0 2px 12px rgba(37,99,235,0.3)", whiteSpace: "nowrap" },
+      btnSec: { padding: "9px 18px", background: "transparent", border: "1px solid #334155", borderRadius: 10, color: "#94a3b8", fontSize: 13, fontWeight: 500, cursor: "pointer" },
+      btnGhost: { background: "transparent", border: "none", color: "#3b82f6", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, padding: 0 },
+
+      overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 },
+      modal: { background: "#141c2e", border: "1px solid #1e293b", borderRadius: 18, width: "100%", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 24px 80px rgba(0,0,0,0.5)" },
+      modalHead: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 28px 14px", borderBottom: "1px solid #1e293b" },
+      modalTitle: { fontSize: 16, fontWeight: 700, color: "#f1f5f9", margin: 0 },
+      iconBtn: { background: "transparent", border: "none", color: "#64748b", cursor: "pointer", padding: 4, display: "flex" },
+
+      row: { display: "flex", gap: 12 },
+      lbl: { fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: ".04em" },
+      inp: { width: "100%", boxSizing: "border-box", padding: "9px 12px", background: "#0f172a", border: "1px solid #1e293b", borderRadius: 10, color: "#e2e8f0", fontSize: 13, outline: "none", fontFamily: "inherit", transition: "border-color .2s" },
+      fActions: { display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22 },
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
