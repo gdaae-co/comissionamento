@@ -338,16 +338,18 @@
     }
 
     // Calcula o total de diárias para um militar com seus módulos
-    // Regra: para cada módulo, valor_diaria(posto, localidade) * (dias - 0.5)
+    // Regra: o desconto de 0.5 dia (viagem de ida) é aplicado APENAS no primeiro módulo válido
     // Se módulos tiverem localidades diferentes, soma cada um separado
     function calcTotalDiarias(postoGrad, modulos) {
       if (!modulos || modulos.length === 0) return 0;
       let total = 0;
+      let firstValid = true;
       for (const mod of modulos) {
         const dias = diffDays(mod.dataInicio, mod.dataFim);
         if (dias <= 0) continue;
         const valorDiaria = getValorDiaria(postoGrad, mod.localidade);
-        total += valorDiaria * (dias - 0.5);
+        total += valorDiaria * (firstValid ? dias - 0.5 : dias);
+        firstValid = false;
       }
       return total;
     }
@@ -355,6 +357,7 @@
     // Retorna detalhamento das diárias por módulo (para exibição)
     function detalheDiarias(postoGrad, modulos) {
       if (!modulos || modulos.length === 0) return [];
+      let firstValid = true;
       return modulos
         .filter(mod => diffDays(mod.dataInicio, mod.dataFim) > 0)
         .map(mod => {
@@ -362,14 +365,16 @@
           const valorDiaria = getValorDiaria(postoGrad, mod.localidade);
           const col = getColunaDiaria(mod.localidade);
           const colLabel = col === 0 ? "BSB/MAO/RJ/SP" : col === 1 ? "Capital" : "Demais";
+          const multiplicador = firstValid ? dias - 0.5 : dias;
+          firstValid = false;
           return {
             descricao: mod.descricao || mod.tipo,
             localidade: mod.localidade || "—",
             dias,
             valorDiaria,
             colLabel,
-            subtotal: valorDiaria * (dias - 0.5),
-            multiplicador: dias - 0.5,
+            subtotal: valorDiaria * multiplicador,
+            multiplicador,
           };
         });
     }
