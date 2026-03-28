@@ -685,6 +685,158 @@
        ABA: DASHBOARD
        ═══════════════════════════════════════ */
     /* ── Radial Economicidade Chart ── */
+    /* ── Rank abbreviation helper ── */
+    function rankAbbr(postoGrad) {
+      const m = { "Cel":"CEL","TC":"TC","Maj":"MAJ","Cap":"CAP","1º Ten":"1T","2º Ten":"2T",
+                  "SubOf":"SO","1º Sgt":"1S","2º Sgt":"2S","3º Sgt":"3S","Cb":"CB","S1":"S1","S2":"S2" };
+      return m[postoGrad] || (postoGrad||"?").slice(0,3).toUpperCase();
+    }
+
+    /* ── Insígnia FAB ── */
+    function InsigniaFAB({ postoGrad, size }) {
+      const sz = size || 34;
+      const cx = sz / 2;
+      const rounding = Math.max(6, Math.round(sz * 0.23));
+      const CFG = {
+        "Cel":    { abbr:"CEL", g1:"#6b3a0f", g2:"#d97706", ac:"#fde68a", type:"stars",    n:3 },
+        "TC":     { abbr:"TC",  g1:"#6b3a0f", g2:"#b45309", ac:"#fde68a", type:"stars",    n:2 },
+        "Maj":    { abbr:"MAJ", g1:"#6b3a0f", g2:"#92400e", ac:"#fcd34d", type:"stars",    n:1 },
+        "Cap":    { abbr:"CAP", g1:"#0c2a6b", g2:"#1e40af", ac:"#fbbf24", type:"bars",     n:3 },
+        "1º Ten": { abbr:"1T",  g1:"#0c2a6b", g2:"#1d4ed8", ac:"#fbbf24", type:"bars",     n:2 },
+        "2º Ten": { abbr:"2T",  g1:"#0c2a6b", g2:"#2563eb", ac:"#fbbf24", type:"bars",     n:1 },
+        "SubOf":  { abbr:"SO",  g1:"#1e1b4b", g2:"#4338ca", ac:"#a5b4fc", type:"diamond",  n:1 },
+        "1º Sgt": { abbr:"1S",  g1:"#0f172a", g2:"#1e293b", ac:"#e2e8f0", type:"chevrons", n:3 },
+        "2º Sgt": { abbr:"2S",  g1:"#0f172a", g2:"#1e293b", ac:"#cbd5e1", type:"chevrons", n:2 },
+        "3º Sgt": { abbr:"3S",  g1:"#0f172a", g2:"#334155", ac:"#94a3b8", type:"chevrons", n:1 },
+        "Cb":     { abbr:"CB",  g1:"#0f172a", g2:"#1c1917", ac:"#78716c", type:"bars",     n:2 },
+        "S1":     { abbr:"S1",  g1:"#0f172a", g2:"#1c1917", ac:"#57534e", type:"bars",     n:1 },
+        "S2":     { abbr:"S2",  g1:"#0f172a", g2:"#1c1917", ac:"#44403c", type:"none",     n:0 },
+      };
+      const cfg = CFG[postoGrad] || { abbr:(postoGrad||"?").slice(0,3).toUpperCase(), g1:"#0f172a", g2:"#1e293b", ac:"#64748b", type:"none", n:0 };
+      const gradId = `fab-${cfg.abbr}`;
+
+      function starPath(x, y, ro, ri) {
+        let d = "";
+        for (let i = 0; i < 10; i++) {
+          const a = (i * Math.PI / 5) - Math.PI / 2;
+          const r = i % 2 === 0 ? ro : ri;
+          d += (i === 0 ? "M" : "L") + (x + r * Math.cos(a)).toFixed(2) + "," + (y + r * Math.sin(a)).toFixed(2);
+        }
+        return d + "Z";
+      }
+
+      const symTop = sz * 0.55, symH = sz * 0.37;
+      let symbols = null;
+
+      if (cfg.type === "stars") {
+        const ro = sz * 0.10, ri = ro * 0.42;
+        const spacing = sz * 0.25, totalW = (cfg.n - 1) * spacing;
+        const sy = symTop + symH * 0.4;
+        symbols = Array.from({ length: cfg.n }, (_, i) => (
+          <path key={i} d={starPath(cx - totalW / 2 + i * spacing, sy, ro, ri)} fill={cfg.ac} />
+        ));
+      } else if (cfg.type === "bars") {
+        const bh = Math.max(1.5, sz * 0.075), bw = sz * 0.60, gap = sz * 0.055;
+        const totalH = cfg.n * bh + (cfg.n - 1) * gap;
+        const sy = symTop + (symH - totalH) / 2;
+        symbols = Array.from({ length: cfg.n }, (_, i) => (
+          <rect key={i} x={(sz - bw) / 2} y={sy + i * (bh + gap)} width={bw} height={bh} rx={bh / 2} fill={cfg.ac} />
+        ));
+      } else if (cfg.type === "chevrons") {
+        const cw = sz * 0.50, ch = sz * 0.09, gap = sz * 0.055;
+        const totalH = cfg.n * ch + (cfg.n - 1) * gap;
+        const sy = symTop + (symH - totalH) / 2;
+        symbols = Array.from({ length: cfg.n }, (_, i) => {
+          const y0 = sy + i * (ch + gap);
+          return (
+            <path key={i} d={`M${cx - cw / 2},${y0} L${cx},${y0 + ch} L${cx + cw / 2},${y0}`}
+              fill="none" stroke={cfg.ac} strokeWidth={Math.max(1, sz * 0.06)}
+              strokeLinecap="round" strokeLinejoin="round" />
+          );
+        });
+      } else if (cfg.type === "diamond") {
+        const r = sz * 0.16, sy = symTop + symH * 0.4;
+        symbols = <path d={`M${cx},${sy - r} L${cx + r},${sy} L${cx},${sy + r} L${cx - r},${sy} Z`} fill={cfg.ac} />;
+      }
+
+      return (
+        <svg width={sz} height={sz} viewBox={`0 0 ${sz} ${sz}`} style={{ flexShrink: 0, borderRadius: rounding, display: "block" }}>
+          <defs>
+            <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor={cfg.g1} /><stop offset="100%" stopColor={cfg.g2} />
+            </linearGradient>
+          </defs>
+          <rect width={sz} height={sz} rx={rounding} fill={`url(#${gradId})`} />
+          <rect x={0} y={0} width={sz} height={sz * 0.055} rx={rounding} fill={cfg.ac} opacity="0.35" />
+          <text x={cx} y={sz * 0.44} textAnchor="middle" dominantBaseline="middle"
+            fill={cfg.ac} fontSize={sz * 0.28} fontWeight="800" fontFamily="Arial,sans-serif">{cfg.abbr}</text>
+          {symbols}
+        </svg>
+      );
+    }
+
+    /* ── Economicidade Progress Panel (substitui EconRadialChart) ── */
+    function EconProgressPanel({ milData }) {
+      const [filterPropId, setFilterPropId] = useState("");
+      const PALETTE = ["#3b82f6","#f59e0b","#8b5cf6","#06b6d4","#f43f5e","#a78bfa","#34d399","#fb923c","#e879f9"];
+      const withData = milData.filter(m => m.limiarEconomicidade > 0);
+      const withoutData = milData.filter(m => m.limiarEconomicidade <= 0);
+      const propList = [...new Map(milData.map(m => [m._propId, { id: m._propId, titulo: m._propTitulo }])).values()];
+      const filtered = filterPropId ? withData.filter(m => m._propId === filterPropId) : withData;
+      const atingiram = withData.filter(m => m.atingiuEconomicidade).length;
+
+      return (
+        <div>
+          <div style={{ display:"flex", gap:10, alignItems:"center", marginBottom:14, flexWrap:"wrap" }}>
+            <div style={{ display:"flex", gap:8, flex:1, flexWrap:"wrap" }}>
+              <span style={{ background:"rgba(34,197,94,0.1)", border:"1px solid rgba(34,197,94,0.2)", borderRadius:6, padding:"4px 12px", fontSize:11, fontWeight:700, color:"#22c55e" }}>✔ {atingiram} atingiram</span>
+              <span style={{ background:"rgba(245,158,11,0.1)", border:"1px solid rgba(245,158,11,0.2)", borderRadius:6, padding:"4px 12px", fontSize:11, fontWeight:700, color:"#f59e0b" }}>⏳ {withData.length - atingiram} em progresso</span>
+              {withoutData.length > 0 && <span style={{ background:"rgba(100,116,139,0.1)", border:"1px solid rgba(100,116,139,0.2)", borderRadius:6, padding:"4px 12px", fontSize:11, fontWeight:600, color:"#64748b" }}>⚠ {withoutData.length} sem dados</span>}
+            </div>
+            {propList.length > 1 && (
+              <select style={{ ...S.inp, maxWidth:200, fontSize:11 }} value={filterPropId} onChange={e => setFilterPropId(e.target.value)}>
+                <option value="">Todas as propostas</option>
+                {propList.map(p => <option key={p.id} value={p.id}>{p.titulo || "Sem título"}</option>)}
+              </select>
+            )}
+          </div>
+          {filtered.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"24px 0", color:"#475569", fontSize:12 }}>Nenhum militar com dados financeiros cadastrados.</div>
+          ) : (
+            <div style={{ display:"flex", flexDirection:"column", gap:8, maxHeight:340, overflowY:"auto", paddingRight:2 }}>
+              {filtered.map((m, i) => {
+                const pct = Math.min(100, (m.totalDiariasExec / m.limiarEconomicidade) * 100);
+                const color = m.atingiuEconomicidade ? "#22c55e" : PALETTE[i % PALETTE.length];
+                return (
+                  <div key={m.id} style={{ background:"#0c111b", border:`1px solid ${m.atingiuEconomicidade ? "rgba(34,197,94,0.25)" : "#1e293b"}`, borderRadius:10, padding:"10px 14px" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5 }}>
+                      <span style={{ fontSize:12, fontWeight:700, color:"#e2e8f0" }}>{m.postoGrad} {m.nomeGuerra}</span>
+                      <span style={{ fontSize:12, fontWeight:900, color }}>{m.atingiuEconomicidade ? "✔ " : ""}{Math.round(pct)}%</span>
+                    </div>
+                    <div style={{ height:5, background:"rgba(255,255,255,0.06)", borderRadius:3, overflow:"hidden", marginBottom:8 }}>
+                      <div style={{ height:"100%", width:`${pct}%`, background:color, borderRadius:3, transition:"width 1.2s ease" }}/>
+                    </div>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
+                      {[
+                        { l:"Meta",      v:m.limiarEconomicidade,                                 c:"#94a3b8" },
+                        { l:"Executado", v:m.totalDiariasExec,                                    c:color },
+                        { l:"Falta",     v:m.faltaEconomicidade, c:m.atingiuEconomicidade?"#22c55e":"#f59e0b" },
+                      ].map((x, j) => (
+                        <div key={j} style={{ background:"rgba(0,0,0,0.3)", borderRadius:6, padding:"5px 8px" }}>
+                          <div style={{ fontSize:9, color:"#475569", textTransform:"uppercase", fontWeight:700, letterSpacing:".05em", marginBottom:2 }}>{x.l}</div>
+                          <div style={{ fontSize:11, fontWeight:800, color:x.c }}>{fmtMoney(x.v)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     function EconRadialChart({ milData }) {
       const [animPcts, setAnimPcts] = useState({});
       useEffect(() => {
@@ -1074,11 +1226,11 @@
                 <span style={{fontSize:20}}>⚖️</span>
                 <div>
                   <h3 style={{margin:0,fontSize:14,fontWeight:700,color:"#f1f5f9"}}>Princípio da Economicidade</h3>
-                  <p style={{margin:"2px 0 0",fontSize:11,color:"#475569"}}>Anéis concêntricos — progresso de cada militar em relação ao limiar</p>
+                  <p style={{margin:"2px 0 0",fontSize:11,color:"#475569"}}>Meta, executado e saldo de cada militar — filtre por proposta</p>
                 </div>
               </div>
               <div style={{padding:"20px 22px"}}>
-                <EconRadialChart milData={allMil} />
+                <EconProgressPanel milData={allMil} />
                 {/* Mini resumo abaixo do gráfico */}
                 {allMil.filter(m=>m.limiarEconomicidade===0).length > 0 && (
                   <div style={{marginTop:16,padding:"10px 14px",background:"rgba(100,116,139,0.08)",border:"1px solid rgba(100,116,139,0.15)",borderRadius:8}}>
@@ -1194,7 +1346,7 @@
 
               <div style={{ ...S.card, marginBottom: 16, padding: "22px 24px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
-                  <div style={{ ...S.avatar, width: 52, height: 52, fontSize: 20 }}>{mil.postoGrad?.charAt(0)}</div>
+                  <InsigniaFAB postoGrad={mil.postoGrad} size={52} />
                   <div>
                     <div style={{ fontSize: 18, fontWeight: 800, color: "#f1f5f9", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                       {mil.postoGrad} {mil.nomeGuerra}
@@ -1517,7 +1669,7 @@
                   <div key={mil.id + mil._propId} style={{ ...S.card, cursor: "pointer", transition: "border-color .2s" }} onClick={() => setSelectedMil(mil)}>
                     <div style={{ padding: "16px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <div style={S.avatar}>{mil.postoGrad?.charAt(0)}</div>
+                        <InsigniaFAB postoGrad={mil.postoGrad} size={34} />
                         <div>
                           <div style={{ fontWeight: 600, color: "#f1f5f9", fontSize: 14 }}>{mil.postoGrad} {mil.nomeGuerra}</div>
                           <div style={{ fontSize: 12, color: "#64748b" }}>{mil.nomeCompleto}</div>
@@ -2531,7 +2683,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
               <div key={mil.id} style={{ ...S.card, marginBottom: 16 }}>
                 <div style={{ padding: "16px 22px", borderBottom: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <div style={S.avatar}>{mil.postoGrad?.charAt(0)}</div>
+                    <InsigniaFAB postoGrad={mil.postoGrad} size={34} />
                     <div>
                       <div style={{ fontWeight: 700, color: "#f1f5f9", fontSize: 14 }}>{mil.postoGrad} {mil.nomeGuerra}</div>
                       <div style={{ fontSize: 12, color: "#64748b" }}>{mil.nomeCompleto}</div>
@@ -2757,6 +2909,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
        ═══════════════════════════════════════ */
     function PagTab({ propostas, setPropostas }) {
       const [saved, setSaved] = useState(false);
+      const [filterPropId, setFilterPropId] = useState("");
 
       const updateMilPag = (propostaId, milId, field, value) => {
         setSaved(false);
@@ -2790,6 +2943,15 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
             </button>
           </div>
 
+          {propostas.filter(p => p.militares?.length > 0).length > 1 && (
+            <div style={{ marginBottom: 16 }}>
+              <select style={{ ...S.inp, maxWidth: 320 }} value={filterPropId} onChange={e => setFilterPropId(e.target.value)}>
+                <option value="">— Todas as Propostas —</option>
+                {propostas.filter(p => p.militares?.length > 0).map(p => <option key={p.id} value={p.id}>{p.titulo || "Sem título"}</option>)}
+              </select>
+            </div>
+          )}
+
           <div style={{ ...S.statsGrid, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", marginBottom: 22 }}>
             {[
               { label: "Total de Militares", value: allMil.length, color: "#6366f1" },
@@ -2811,7 +2973,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
             </div>
           ) : (
             <div style={{ display: "grid", gap: 16 }}>
-              {propostas.filter(p => p.militares?.length > 0).map(prop => {
+              {propostas.filter(p => p.militares?.length > 0 && (!filterPropId || p.id === filterPropId)).map(prop => {
                 const pagsDone = prop.militares.filter(m => m.numeroPag).length;
                 return (
                   <div key={prop.id} style={S.card}>
@@ -2832,7 +2994,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                           <div key={mil.id} style={{ background: "#0c111b", border: `1px solid ${done ? "rgba(34,197,94,0.25)" : "#1e293b"}`, borderRadius: 12, padding: "14px 16px", transition: "border-color .2s" }}>
                             <div style={{ display: "flex", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 200, flex: "1 1 200px" }}>
-                                <div style={S.avatar}>{mil.postoGrad?.charAt(0)}</div>
+                                <InsigniaFAB postoGrad={mil.postoGrad} size={34} />
                                 <div style={{ flex: 1 }}>
                                   <div style={{ fontWeight: 600, color: "#f1f5f9", fontSize: 13 }}>{mil.postoGrad} {mil.nomeGuerra}</div>
                                   <div style={{ fontSize: 11, color: "#64748b" }}>{mil.nomeCompleto}</div>
@@ -2877,6 +3039,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
        ═══════════════════════════════════════ */
     function PortariaTab({ propostas, setPropostas }) {
       const [saved, setSaved] = useState(false);
+      const [filterPropId, setFilterPropId] = useState("");
 
       const updateMilField = (propostaId, milId, field, value) => {
         setSaved(false);
@@ -2911,6 +3074,15 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
             </button>
           </div>
 
+          {propostas.filter(p => p.militares?.length > 0).length > 1 && (
+            <div style={{ marginBottom: 16 }}>
+              <select style={{ ...S.inp, maxWidth: 320 }} value={filterPropId} onChange={e => setFilterPropId(e.target.value)}>
+                <option value="">— Todas as Propostas —</option>
+                {propostas.filter(p => p.militares?.length > 0).map(p => <option key={p.id} value={p.id}>{p.titulo || "Sem título"}</option>)}
+              </select>
+            </div>
+          )}
+
           <div style={{ ...S.statsGrid, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", marginBottom: 22 }}>
             {[
               { label: "Total de Militares", value: allMil.length, color: "#6366f1" },
@@ -2933,7 +3105,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
             </div>
           ) : (
             <div style={{ display: "grid", gap: 16 }}>
-              {propostas.filter(p => p.militares?.length > 0).map(prop => {
+              {propostas.filter(p => p.militares?.length > 0 && (!filterPropId || p.id === filterPropId)).map(prop => {
                 const portOk = prop.militares.filter(m => m.portaria).length;
                 const bolOk = prop.militares.filter(m => m.boletim).length;
                 return (
@@ -2960,7 +3132,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                         return (
                           <div key={mil.id} style={{ background: "#0c111b", border: `1px solid ${published ? "rgba(34,197,94,0.25)" : done ? "rgba(139,92,246,0.25)" : "#1e293b"}`, borderRadius: 12, padding: "14px 16px", transition: "border-color .2s" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                              <div style={S.avatar}>{mil.postoGrad?.charAt(0)}</div>
+                              <InsigniaFAB postoGrad={mil.postoGrad} size={34} />
                               <div style={{ flex: 1 }}>
                                 <div style={{ fontWeight: 600, color: "#f1f5f9", fontSize: 13 }}>{mil.postoGrad} {mil.nomeGuerra}</div>
                                 <div style={{ fontSize: 11, color: "#64748b" }}>{mil.nomeCompleto}</div>
@@ -3022,6 +3194,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
 
     function NumerarioTab({ propostas, setPropostas }) {
       const [saved, setSaved] = useState(false);
+      const [filterPropId, setFilterPropId] = useState("");
 
       const updateMilNum = (propostaId, milId, field, value) => {
         setSaved(false);
@@ -3061,6 +3234,15 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
             </button>
           </div>
 
+          {propostasComBol.length > 1 && (
+            <div style={{ marginBottom: 16 }}>
+              <select style={{ ...S.inp, maxWidth: 320 }} value={filterPropId} onChange={e => setFilterPropId(e.target.value)}>
+                <option value="">— Todas as Propostas —</option>
+                {propostasComBol.map(p => <option key={p.id} value={p.id}>{p.titulo || "Sem título"}</option>)}
+              </select>
+            </div>
+          )}
+
           <div style={{ ...S.statsGrid, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", marginBottom: 22 }}>
             {[
               { label: "Militares Elegíveis", value: allMil.length, color: "#6366f1" },
@@ -3083,7 +3265,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
             </div>
           ) : (
             <div style={{ display: "grid", gap: 16 }}>
-              {propostasComBol.map(prop => {
+              {propostasComBol.filter(p => !filterPropId || p.id === filterPropId).map(prop => {
                 const okCount = prop.militares.filter(m => m.numBoletim).length;
                 return (
                   <div key={prop.id} style={S.card}>
@@ -3103,7 +3285,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                         return (
                           <div key={mil.id} style={{ background: "#0c111b", border: `1px solid ${mil.numBoletim ? "rgba(34,197,94,0.25)" : "#1e293b"}`, borderRadius: 12, padding: "14px 16px", transition: "border-color .2s" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                              <div style={S.avatar}>{mil.postoGrad?.charAt(0)}</div>
+                              <InsigniaFAB postoGrad={mil.postoGrad} size={34} />
                               <div style={{ flex: 1 }}>
                                 <div style={{ fontWeight: 600, color: "#f1f5f9", fontSize: 13 }}>{mil.postoGrad} {mil.nomeGuerra}</div>
                                 <div style={{ fontSize: 11, color: "#64748b" }}>{mil.nomeCompleto}</div>
@@ -3312,10 +3494,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                             }}
                           >
                             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <div style={{ ...S.avatar, width: 30, height: 30, fontSize: 11, flexShrink: 0,
-                                background: fechado ? "linear-gradient(135deg,#14532d,#16a34a)" : "linear-gradient(135deg,#1e3a5f,#1e40af)" }}>
-                                {mil.postoGrad?.charAt(0)}
-                              </div>
+                              <InsigniaFAB postoGrad={mil.postoGrad} size={30} />
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: 12, fontWeight: 600, color: isSelected ? "#f1f5f9" : "#cbd5e1",
                                   whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -3352,10 +3531,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                   <div style={{ ...S.card }}>
                     <div style={{ padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <div style={{ ...S.avatar, width: 44, height: 44, fontSize: 15,
-                          background: cm.isFechado ? "linear-gradient(135deg,#14532d,#16a34a)" : "linear-gradient(135deg,#1e3a5f,#1e40af)" }}>
-                          {selMil.postoGrad?.charAt(0)}
-                        </div>
+                        <InsigniaFAB postoGrad={selMil.postoGrad} size={44} />
                         <div>
                           <div style={{ fontSize: 16, fontWeight: 700, color: "#f1f5f9" }}>{selMil.postoGrad} {selMil.nomeGuerra}</div>
                           <div style={{ fontSize: 12, color: "#64748b" }}>{selMil.nomeCompleto}</div>
@@ -3946,10 +4122,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                             return (
                               <div key={m.id} style={{ background: "#141c2e", border: `1px solid ${fechado ? "rgba(34,197,94,0.2)" : "#1e293b"}`, borderRadius: 10, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                                 <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                                  <div style={{ ...S.avatar, width: 28, height: 28, fontSize: 11, flexShrink: 0,
-                                    background: fechado ? "linear-gradient(135deg,#14532d,#16a34a)" : "linear-gradient(135deg,#1e3a5f,#1e40af)" }}>
-                                    {m.postoGrad?.charAt(0)}
-                                  </div>
+                                  <InsigniaFAB postoGrad={m.postoGrad} size={28} />
                                   <div style={{ minWidth: 0 }}>
                                     <div style={{ fontSize: 13, fontWeight: 600, color: "#f1f5f9", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.postoGrad} {m.nomeGuerra}</div>
                                     <div style={{ fontSize: 11, color: "#64748b" }}>{p.titulo || "Sem título"} · {fechado ? <span style={{ color: "#22c55e" }}>✔ Fechado</span> : <span style={{ color: "#f59e0b" }}>Em andamento</span>}</div>
@@ -4009,9 +4182,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                         {militaresArquivadosAvulsos.map(m => (
                           <div key={m.id} style={{ background: "rgba(30,41,59,0.4)", border: "1px solid #1e293b", borderRadius: 10, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <div style={{ ...S.avatar, width: 28, height: 28, fontSize: 11, background: "linear-gradient(135deg,#14532d,#16a34a)" }}>
-                                {m.postoGrad?.charAt(0)}
-                              </div>
+                              <InsigniaFAB postoGrad={m.postoGrad} size={28} />
                               <div>
                                 <div style={{ fontSize: 13, fontWeight: 600, color: "#94a3b8" }}>{m.postoGrad} {m.nomeGuerra}</div>
                                 <div style={{ fontSize: 11, color: "#475569" }}>{m._propTitulo} · Arquivado</div>
