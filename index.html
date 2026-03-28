@@ -2269,7 +2269,7 @@ ${textoLimitado}`;
                 const di = calcTotalDiarias(m.postoGrad, m.modulos || []);
                 const ab = parseFloat(m.valorAbertura) || 0;
                 const fe = parseFloat(m.valorFechamento) || 0;
-                const total = ab + fe + di;
+                const total = ab + fe;
                 return (
                   <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "#0c111b", borderRadius: 8, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8", minWidth: 140 }}>{m.postoGrad} {m.nomeGuerra || "—"}</span>
@@ -2292,7 +2292,7 @@ ${textoLimitado}`;
               { l: "Σ Abertura", v: totais.totalAbertura, c: "#3b82f6" },
               { l: "Σ Fechamento", v: totais.totalFechamento, c: "#8b5cf6" },
               { l: "Σ Diárias", v: prop.militares.reduce((s,m) => s + calcTotalDiarias(m.postoGrad, m.modulos||[]), 0), c: "#f59e0b" },
-              { l: "Σ Geral", v: totais.totalAbertura + totais.totalFechamento + prop.militares.reduce((s,m) => s + calcTotalDiarias(m.postoGrad, m.modulos||[]), 0), c: "#22c55e" },
+              { l: "Σ Geral", v: totais.totalAbertura + totais.totalFechamento, c: "#22c55e" },
             ].map((x, i) => (
               <div key={i} style={{ padding: "16px 20px", borderRight: i < 3 ? "1px solid #1e293b" : "none" }}>
                 <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 4 }}>{x.l}</div>
