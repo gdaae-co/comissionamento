@@ -2266,7 +2266,6 @@ ${textoLimitado}`;
             <div style={{ fontSize: 10, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 10 }}>Por Militar</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {prop.militares.map(m => {
-                const di = calcTotalDiarias(m.postoGrad, m.modulos || []);
                 const ab = parseFloat(m.valorAbertura) || 0;
                 const fe = parseFloat(m.valorFechamento) || 0;
                 const total = ab + fe;
@@ -2274,7 +2273,7 @@ ${textoLimitado}`;
                   <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "#0c111b", borderRadius: 8, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8", minWidth: 140 }}>{m.postoGrad} {m.nomeGuerra || "—"}</span>
                     <div style={{ display: "flex", gap: 14, flexWrap: "wrap", flex: 1 }}>
-                      {[{l:"Abertura",v:ab,c:"#3b82f6"},{l:"Fechamento",v:fe,c:"#8b5cf6"},{l:"Diárias",v:di,c:"#f59e0b"},{l:"Total",v:total,c:"#22c55e"}].map((x,i)=>(
+                      {[{l:"Abertura",v:ab,c:"#3b82f6"},{l:"Fechamento",v:fe,c:"#8b5cf6"},{l:"Total",v:total,c:"#22c55e"}].map((x,i)=>(
                         <div key={i}>
                           <div style={{ fontSize: 9, color: "#475569", fontWeight: 600, textTransform: "uppercase" }}>{x.l}</div>
                           <div style={{ fontSize: 13, fontWeight: 800, color: x.c }}>{fmtMoney(x.v)}</div>
@@ -2287,14 +2286,13 @@ ${textoLimitado}`;
             </div>
           </div>
           {/* Totais gerais */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)" }}>
             {[
               { l: "Σ Abertura", v: totais.totalAbertura, c: "#3b82f6" },
               { l: "Σ Fechamento", v: totais.totalFechamento, c: "#8b5cf6" },
-              { l: "Σ Diárias", v: prop.militares.reduce((s,m) => s + calcTotalDiarias(m.postoGrad, m.modulos||[]), 0), c: "#f59e0b" },
               { l: "Σ Geral", v: totais.totalAbertura + totais.totalFechamento, c: "#22c55e" },
             ].map((x, i) => (
-              <div key={i} style={{ padding: "16px 20px", borderRight: i < 3 ? "1px solid #1e293b" : "none" }}>
+              <div key={i} style={{ padding: "16px 20px", borderRight: i < 2 ? "1px solid #1e293b" : "none" }}>
                 <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 4 }}>{x.l}</div>
                 <div style={{ fontSize: 20, fontWeight: 900, color: x.c }}>{fmtMoney(x.v)}</div>
               </div>
@@ -2562,7 +2560,6 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                       { l: "Abertura", v: valAb, c: "#3b82f6", fmt: true },
                       { l: "Fechamento", v: valFe, c: "#8b5cf6", fmt: true },
                       { l: "Abert.+Fech.", v: valAb + valFe, c: "#22c55e", fmt: true },
-                      { l: "Diárias", v: parseFloat(mil.valorDiarias) || 0, c: "#f59e0b", fmt: true },
                     ].map((x, i) => (
                       <div key={i}>
                         <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>{x.l}</div>
@@ -2584,10 +2581,9 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
               {[
                 { l: "Σ Abertura", v: totais.totalAbertura, c: "#3b82f6" },
                 { l: "Σ Fechamento", v: totais.totalFechamento, c: "#8b5cf6" },
-                { l: "Σ Diárias", v: totais.totalDiarias, c: "#f59e0b" },
                 { l: "Σ Total Geral", v: totais.totalAbertura + totais.totalFechamento, c: "#22c55e" },
               ].map((x, i) => (
-                <div key={i} style={{ padding: "20px 24px", borderRight: i < 3 ? "1px solid #1e293b" : "none" }}>
+                <div key={i} style={{ padding: "20px 24px", borderRight: i < 2 ? "1px solid #1e293b" : "none" }}>
                   <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 6 }}>{x.l}</div>
                   <div style={{ fontSize: 22, fontWeight: 800, color: x.c }}>{fmtMoney(x.v)}</div>
                 </div>
