@@ -2585,7 +2585,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                 { l: "Σ Abertura", v: totais.totalAbertura, c: "#3b82f6" },
                 { l: "Σ Fechamento", v: totais.totalFechamento, c: "#8b5cf6" },
                 { l: "Σ Diárias", v: totais.totalDiarias, c: "#f59e0b" },
-                { l: "Σ Total Geral", v: totais.totalAbertura + totais.totalFechamento + totais.totalDiarias, c: "#22c55e" },
+                { l: "Σ Total Geral", v: totais.totalAbertura + totais.totalFechamento, c: "#22c55e" },
               ].map((x, i) => (
                 <div key={i} style={{ padding: "20px 24px", borderRight: i < 3 ? "1px solid #1e293b" : "none" }}>
                   <div style={{ fontSize: 10, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 6 }}>{x.l}</div>
