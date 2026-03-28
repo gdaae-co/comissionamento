@@ -1730,8 +1730,19 @@ O texto foi extraído linha a linha do PDF. Cada linha da tabela visual gera uma
 Às vezes o campo DEP (S ou N) aparece colado ao nome ou em linha separada logo abaixo — sempre associe ao militar da linha acima.
 Os módulos aparecem em linhas separadas antes ou junto ao militar, no formato:
   DD/MM/AAAA DD/MM/AAAA NNN DESCRIÇÃO DA MISSÃO - Cidade/Estado    SIGLA_OM
-Use TOTAL DIAS do militar para saber quantos módulos pertencem a ele (soma dos Nº DE DIAS dos módulos = TOTAL DIAS).
+ATENÇÃO: a descrição de um módulo pode ocupar MÚLTIPLAS linhas de texto. Por exemplo:
+  15/6/2026 30/6/2026 16
+  RECONHECIMENTO E ESCOLHA PARA
+  OCUPAÇÃO DE POSIÇÃO DTCEA-CTD
+  2026 - Catanduvas/PR
+  DTCEA-CTD
+Nesse caso, concatene as linhas até encontrar a SIGLA_OM (palavra em maiúsculas sem datas).
 Os valores R$ na linha do militar são: primeiro R$ = INÍCIO da ajuda de custo, segundo R$ = TÉRMINO.
+
+REGRA CRÍTICA DE MÓDULOS — VALIDAÇÃO OBRIGATÓRIA:
+Após extrair os módulos de um militar, SOME os "Nº DE DIAS" de cada módulo.
+Se a soma NÃO for igual ao TOTAL DIAS do militar, você OBRIGATORIAMENTE deve continuar buscando módulos adicionais nas linhas seguintes do texto (mesmo que pareçam pertencer ao próximo militar) até que a soma bata com o TOTAL DIAS.
+Exemplo: militar com TOTAL DIAS = 55 e módulos extraídos com 16+17+6 = 39 dias → FALTAM 16 dias → há mais um módulo a ser extraído nas linhas seguintes.
 
 REGRAS IMPORTANTES:
 0. ORDEM OBRIGATÓRIA: Extraia o campo "prioridade" de cada militar (número da primeira coluna da tabela: 1, 2, 3...). Liste os militares na ordem crescente de prioridade (prioridade 1 primeiro, 2 segundo, etc.).
