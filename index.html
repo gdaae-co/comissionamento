@@ -693,149 +693,52 @@
     }
 
     /* ── Mapeamento oficial postoGrad → arquivo de insígnia FAB ── */
-    const RANK_INSIGNIA_MAP = {
-      // Oficiais Generais
-      "MarAr":   "marechal-do-ar.png",
-      "TenBrig": "tenente-brigadeiro.png",
-      "MajBrig": "major-brigadeiro.png",
-      "Brig":    "brigadeiro.png",
-      // Oficiais Superiores
-      "Cel":     "coronel.png",
-      "TC":      "tenente-coronel.png",
-      "Maj":     "major.png",
-      // Oficiais Intermediários
-      "Cap":     "capitao.png",
-      // Oficiais Subalternos
-      "1º Ten":  "primeiro-tenente.png",
-      "2º Ten":  "segundo-tenente.png",
-      "Asp":     "aspirante.png",
-      // Graduados
-      "SubOf":   "suboficial.png",
-      "1º Sgt":  "primeiro-sargento.png",
-      "2º Sgt":  "segundo-sargento.png",
-      "3º Sgt":  "terceiro-sargento.png",
-      // Praças
-      "Cb":      "cabo.png",
-      "S1":      "soldado-1.png",
-      "S2":      "soldado-2.png",
-      // Taifeiros
-      "TfMor":   "taifeiro-mor.png",
-      "Tf1":     "taifeiro-1.png",
-      "Tf2":     "taifeiro-2.png",
-    };
-
-    /* ── Insígnia FAB ── */
-    /* Tenta carregar a imagem real de /assets/insignias/{arquivo}.
-       Se não encontrar (imagem ainda não enviada), usa o badge SVG como fallback. */
+    /* ── Insígnia FAB — badge com sigla ── */
     function InsigniaFAB({ postoGrad, size }) {
       const sz = size || 34;
-      const [useImg, setUseImg] = useState(true);
-
-      const filename = RANK_INSIGNIA_MAP[postoGrad];
-
-      // Reset para tentar imagem sempre que o posto mudar
-      React.useEffect(() => { setUseImg(true); }, [postoGrad]);
-
-      if (filename && useImg) {
-        return (
-          <img
-            src={`/assets/insignias/${filename}`}
-            alt={postoGrad || "Posto"}
-            title={postoGrad}
-            width={sz}
-            height={sz}
-            onError={() => setUseImg(false)}
-            style={{ display:"block", flexShrink:0, objectFit:"contain", objectPosition:"center" }}
-          />
-        );
-      }
-
-      /* ── Fallback SVG (exibido enquanto as imagens não forem enviadas) ── */
-      const cx = sz / 2;
-      const rounding = Math.max(6, Math.round(sz * 0.23));
-      const CFG = {
-        "Cel":    { abbr:"CEL", g1:"#6b3a0f", g2:"#d97706", ac:"#fde68a", type:"stars",    n:3 },
-        "TC":     { abbr:"TC",  g1:"#6b3a0f", g2:"#b45309", ac:"#fde68a", type:"stars",    n:2 },
-        "Maj":    { abbr:"MAJ", g1:"#6b3a0f", g2:"#92400e", ac:"#fcd34d", type:"stars",    n:1 },
-        "Brig":   { abbr:"BRG", g1:"#6b3a0f", g2:"#d97706", ac:"#fde68a", type:"stars",    n:1 },
-        "MajBrig":{ abbr:"MB",  g1:"#6b3a0f", g2:"#d97706", ac:"#fde68a", type:"stars",    n:2 },
-        "TenBrig":{ abbr:"TB",  g1:"#6b3a0f", g2:"#d97706", ac:"#fde68a", type:"stars",    n:3 },
-        "MarAr":  { abbr:"MAR", g1:"#6b3a0f", g2:"#d97706", ac:"#fde68a", type:"stars",    n:4 },
-        "Cap":    { abbr:"CAP", g1:"#0c2a6b", g2:"#1e40af", ac:"#fbbf24", type:"bars",     n:3 },
-        "1º Ten": { abbr:"1T",  g1:"#0c2a6b", g2:"#1d4ed8", ac:"#fbbf24", type:"bars",     n:2 },
-        "2º Ten": { abbr:"2T",  g1:"#0c2a6b", g2:"#2563eb", ac:"#fbbf24", type:"bars",     n:1 },
-        "Asp":    { abbr:"ASP", g1:"#0c2a6b", g2:"#2563eb", ac:"#93c5fd", type:"none",     n:0 },
-        "SubOf":  { abbr:"SO",  g1:"#1e1b4b", g2:"#4338ca", ac:"#a5b4fc", type:"diamond",  n:1 },
-        "1º Sgt": { abbr:"1S",  g1:"#0f172a", g2:"#1e293b", ac:"#e2e8f0", type:"chevrons", n:3 },
-        "2º Sgt": { abbr:"2S",  g1:"#0f172a", g2:"#1e293b", ac:"#cbd5e1", type:"chevrons", n:2 },
-        "3º Sgt": { abbr:"3S",  g1:"#0f172a", g2:"#334155", ac:"#94a3b8", type:"chevrons", n:1 },
-        "Cb":     { abbr:"CB",  g1:"#0f172a", g2:"#1c1917", ac:"#78716c", type:"bars",     n:2 },
-        "S1":     { abbr:"S1",  g1:"#0f172a", g2:"#1c1917", ac:"#57534e", type:"bars",     n:1 },
-        "S2":     { abbr:"S2",  g1:"#0f172a", g2:"#1c1917", ac:"#44403c", type:"none",     n:0 },
-        "TfMor":  { abbr:"TM",  g1:"#1a1a1a", g2:"#2d2d2d", ac:"#9ca3af", type:"none",     n:0 },
-        "Tf1":    { abbr:"T1",  g1:"#1a1a1a", g2:"#2d2d2d", ac:"#9ca3af", type:"bars",     n:1 },
-        "Tf2":    { abbr:"T2",  g1:"#1a1a1a", g2:"#2d2d2d", ac:"#9ca3af", type:"none",     n:0 },
+      const ABBR_MAP = {
+        "MarAr":   { abbr:"MAR AR",   bg:"#78350f", color:"#fcd34d" },
+        "TenBrig": { abbr:"TEN BRIG", bg:"#92400e", color:"#fcd34d" },
+        "MajBrig": { abbr:"MAJ BRIG", bg:"#b45309", color:"#fef3c7" },
+        "Brig":    { abbr:"BRIG",     bg:"#d97706", color:"#1c1917" },
+        "Cel":     { abbr:"CEL",      bg:"#1e3a8a", color:"#fbbf24" },
+        "TC":      { abbr:"TC",       bg:"#1e40af", color:"#fbbf24" },
+        "Maj":     { abbr:"MAJ",      bg:"#1d4ed8", color:"#fbbf24" },
+        "Cap":     { abbr:"CAP",      bg:"#2563eb", color:"#ffffff" },
+        "1º Ten":  { abbr:"1T",       bg:"#3b82f6", color:"#ffffff" },
+        "2º Ten":  { abbr:"2T",       bg:"#60a5fa", color:"#1e3a8a" },
+        "Asp":     { abbr:"ASP",      bg:"#bfdbfe", color:"#1e3a8a" },
+        "SubOf":   { abbr:"SO",       bg:"#4c1d95", color:"#ddd6fe" },
+        "1º Sgt":  { abbr:"1S",       bg:"#1e293b", color:"#e2e8f0" },
+        "2º Sgt":  { abbr:"2S",       bg:"#1e293b", color:"#cbd5e1" },
+        "3º Sgt":  { abbr:"3S",       bg:"#334155", color:"#94a3b8" },
+        "Cb":      { abbr:"CB",       bg:"#292524", color:"#a8a29e" },
+        "S1":      { abbr:"S1",       bg:"#1c1917", color:"#78716c" },
+        "S2":      { abbr:"S2",       bg:"#0c0a09", color:"#57534e" },
+        "TfMor":   { abbr:"TF MOR",   bg:"#18181b", color:"#a1a1aa" },
+        "Tf1":     { abbr:"TF1",      bg:"#18181b", color:"#71717a" },
+        "Tf2":     { abbr:"TF2",      bg:"#18181b", color:"#52525b" },
       };
-      const cfg = CFG[postoGrad] || { abbr:(postoGrad||"?").slice(0,3).toUpperCase(), g1:"#0f172a", g2:"#1e293b", ac:"#64748b", type:"none", n:0 };
-      const gradId = `fab-${cfg.abbr}`;
-
-      function starPath(x, y, ro, ri) {
-        let d = "";
-        for (let i = 0; i < 10; i++) {
-          const a = (i * Math.PI / 5) - Math.PI / 2;
-          const r = i % 2 === 0 ? ro : ri;
-          d += (i === 0 ? "M" : "L") + (x + r * Math.cos(a)).toFixed(2) + "," + (y + r * Math.sin(a)).toFixed(2);
-        }
-        return d + "Z";
-      }
-
-      const symTop = sz * 0.55, symH = sz * 0.37;
-      let symbols = null;
-
-      if (cfg.type === "stars") {
-        const ro = sz * 0.10, ri = ro * 0.42;
-        const spacing = sz * 0.22, totalW = (cfg.n - 1) * spacing;
-        const sy = symTop + symH * 0.4;
-        symbols = Array.from({ length: cfg.n }, (_, i) => (
-          <path key={i} d={starPath(cx - totalW / 2 + i * spacing, sy, ro, ri)} fill={cfg.ac} />
-        ));
-      } else if (cfg.type === "bars") {
-        const bh = Math.max(1.5, sz * 0.075), bw = sz * 0.60, gap = sz * 0.055;
-        const totalH = cfg.n * bh + (cfg.n - 1) * gap;
-        const sy = symTop + (symH - totalH) / 2;
-        symbols = Array.from({ length: cfg.n }, (_, i) => (
-          <rect key={i} x={(sz - bw) / 2} y={sy + i * (bh + gap)} width={bw} height={bh} rx={bh / 2} fill={cfg.ac} />
-        ));
-      } else if (cfg.type === "chevrons") {
-        const cw = sz * 0.50, ch = sz * 0.09, gap = sz * 0.055;
-        const totalH = cfg.n * ch + (cfg.n - 1) * gap;
-        const sy = symTop + (symH - totalH) / 2;
-        symbols = Array.from({ length: cfg.n }, (_, i) => {
-          const y0 = sy + i * (ch + gap);
-          return (
-            <path key={i} d={`M${cx - cw / 2},${y0} L${cx},${y0 + ch} L${cx + cw / 2},${y0}`}
-              fill="none" stroke={cfg.ac} strokeWidth={Math.max(1, sz * 0.06)}
-              strokeLinecap="round" strokeLinejoin="round" />
-          );
-        });
-      } else if (cfg.type === "diamond") {
-        const r = sz * 0.16, sy = symTop + symH * 0.4;
-        symbols = <path d={`M${cx},${sy - r} L${cx + r},${sy} L${cx},${sy + r} L${cx - r},${sy} Z`} fill={cfg.ac} />;
-      }
-
+      const cfg = ABBR_MAP[postoGrad] || { abbr:(postoGrad||"?").slice(0,4).toUpperCase(), bg:"#374151", color:"#d1d5db" };
+      const abbr = cfg.abbr;
+      const fontSize = abbr.length >= 7 ? Math.max(6,  sz * 0.18)
+                     : abbr.length >= 5 ? Math.max(7,  sz * 0.21)
+                     : abbr.length >= 3 ? Math.max(8,  sz * 0.26)
+                     :                    Math.max(10, sz * 0.31);
       return (
-        <svg width={sz} height={sz} viewBox={`0 0 ${sz} ${sz}`} style={{ flexShrink: 0, borderRadius: rounding, display: "block" }}>
-          <defs>
-            <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor={cfg.g1} /><stop offset="100%" stopColor={cfg.g2} />
-            </linearGradient>
-          </defs>
-          <rect width={sz} height={sz} rx={rounding} fill={`url(#${gradId})`} />
-          <rect x={0} y={0} width={sz} height={sz * 0.055} rx={rounding} fill={cfg.ac} opacity="0.35" />
-          <text x={cx} y={sz * 0.44} textAnchor="middle" dominantBaseline="middle"
-            fill={cfg.ac} fontSize={sz * 0.28} fontWeight="800" fontFamily="Arial,sans-serif">{cfg.abbr}</text>
-          {symbols}
-        </svg>
+        <div title={postoGrad} style={{
+          width: sz, height: sz,
+          borderRadius: Math.max(4, sz * 0.2),
+          background: cfg.bg, color: cfg.color,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          flexShrink: 0, fontSize: fontSize,
+          fontWeight: 800, fontFamily: "Arial,sans-serif",
+          letterSpacing: "0.01em", lineHeight: 1.1,
+          textAlign: "center", padding: 2,
+          userSelect: "none",
+        }}>
+          {abbr}
+        </div>
       );
     }
 
