@@ -71,11 +71,13 @@
         try {
           const doc = await db.collection("appData").doc(key).get();
           if (doc.exists) {
-            return { value: JSON.stringify(doc.data()) };
+            return { value: JSON.stringify(doc.data()), exists: true };
           }
-          return null;
+          // Documento confirmado como inexistente (novo usuário)
+          return { value: null, exists: false };
         } catch (e) {
           console.error("Erro ao buscar dados da Nuvem:", e);
+          // Retorna null SOMENTE em erro — diferente de documento inexistente
           return null;
         }
       },
@@ -3686,14 +3688,22 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
               window.storage.get(STORAGE_KEY),
               window.storage.get(STORAGE_KEY + "-assets"),
             ]);
+            // r === null significa ERRO de rede/Firestore — NÃO libera o save
+            // r.exists === false significa documento inexistente (novo usuário) — libera
+            // r.exists === true significa dados carregados — carrega e libera
+            if (r === null) {
+              console.warn("⚠️ Falha ao carregar dados do Firestore — saves bloqueados para proteger dados.");
+              setLoaded(true);
+              return; // safeToSave permanece false — nenhum save vai ocorrer
+            }
             let loaded = {};
-            if (r?.value) loaded = JSON.parse(r.value);
+            if (r.value) loaded = JSON.parse(r.value);
             if (rAssets?.value) {
               const assets = JSON.parse(rAssets.value);
               loaded = { ...loaded, settings: { ...(loaded.settings || {}), ...assets } };
             }
             if (Object.keys(loaded).length > 0) setData(d => ({ ...d, ...loaded }));
-            safeToSave.current = true; // só libera save após load bem-sucedido
+            safeToSave.current = true; // libera só após Firestore confirmar estado
           } catch (e) { console.log("Erro ao inicializar dados:", e); }
           setLoaded(true);
         })();
