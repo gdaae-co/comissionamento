@@ -1010,54 +1010,32 @@
       return (
         <div className="no-print">
           <style>{`
-            @keyframes card-rise { from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:translateY(0);} }
+            @keyframes card-rise { from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);} }
             @keyframes bar-fill  { from{width:0 !important;} }
-            @keyframes glow-p{0%,100%{box-shadow:0 0 0 0 rgba(139,92,246,.28);}50%{box-shadow:0 0 22px 6px rgba(139,92,246,.28);}}
-            @keyframes glow-a{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.28);}50%{box-shadow:0 0 22px 6px rgba(245,158,11,.28);}}
-            @keyframes glow-g{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.28);}50%{box-shadow:0 0 22px 6px rgba(34,197,94,.28);}}
-            @keyframes glow-c{0%,100%{box-shadow:0 0 0 0 rgba(6,182,212,.28);}50%{box-shadow:0 0 22px 6px rgba(6,182,212,.28);}}
-            .dash-card{animation:card-rise .5s ease both;}
-            .dash-bar{animation:bar-fill 1.3s cubic-bezier(.34,1.56,.64,1) both;}
-            .kpi-p{animation:glow-p 3s ease-in-out infinite;}
-            .kpi-a{animation:glow-a 3s ease-in-out .5s infinite;}
-            .kpi-g{animation:glow-g 3s ease-in-out 1s infinite;}
-            .kpi-c{animation:glow-c 3s ease-in-out 1.5s infinite;}
+            .dash-card{animation:card-rise .45s ease both;}
+            .dash-bar{animation:bar-fill 1.2s cubic-bezier(.34,1.56,.64,1) both;}
+            .dash-card:hover{transform:translateY(-2px);transition:transform .2s;}
           `}</style>
 
-          {/* ── Header ── */}
-          <div style={{marginBottom:28,display:"flex",alignItems:"center",gap:14}}>
-            <div style={{width:4,height:30,background:"linear-gradient(180deg,#3b82f6,#8b5cf6)",borderRadius:4}}/>
-            <div>
-              <h2 style={{margin:0,fontSize:22,fontWeight:800,color:"#f1f5f9",letterSpacing:"-.02em"}}>Dashboard Estratégico</h2>
-              <p style={{margin:"3px 0 0",fontSize:12,color:"#475569"}}>Visão panorâmica de acompanhamento operacional — atualizado em tempo real</p>
-            </div>
-          </div>
-
           {/* ── KPI Cards ── */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))",gap:16,marginBottom:22}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:16,marginBottom:24}}>
             {[
-              {label:"Total de Militares",    value:counts.mil,       color:"#8b5cf6",bg:"rgba(139,92,246,.08)",bd:"rgba(139,92,246,.2)",icon:I.users, gc:"kpi-p",pct:null,                                           delay:"0s"},
-              {label:"Em Andamento",          value:counts.andamento, color:"#f59e0b",bg:"rgba(245,158,11,.08)",bd:"rgba(245,158,11,.2)",icon:I.clock, gc:"kpi-a",pct:totMil?Math.round(totAndamento/totMil*100):0,    delay:".1s"},
-              {label:"Fechados",              value:counts.fechados,  color:"#22c55e",bg:"rgba(34,197,94,.08)", bd:"rgba(34,197,94,.2)", icon:I.check, gc:"kpi-g",pct:totMil?Math.round(totFechados/totMil*100):0,     delay:".2s"},
-              {label:"Economicidade Atingida",value:counts.econo,     color:"#06b6d4",bg:"rgba(6,182,212,.08)", bd:"rgba(6,182,212,.2)", icon:I.coin,  gc:"kpi-c",pct:totMil?Math.round(totEconomicidade/totMil*100):0,delay:".3s"},
+              {label:"Total de Militares",    value:counts.mil,       color:"#8b5cf6",icon:I.users, pct:null,                                            delay:"0s"},
+              {label:"Em Andamento",          value:counts.andamento, color:"#f59e0b",icon:I.clock, pct:totMil?Math.round(totAndamento/totMil*100):0,    delay:".08s"},
+              {label:"Fechados",              value:counts.fechados,  color:"#10b981",icon:I.check, pct:totMil?Math.round(totFechados/totMil*100):0,     delay:".16s"},
+              {label:"Economicidade Atingida",value:counts.econo,     color:"#06b6d4",icon:I.coin,  pct:totMil?Math.round(totEconomicidade/totMil*100):0,delay:".24s"},
             ].map((c,i)=>(
-              <div key={i} className={`dash-card ${c.gc}`} style={{background:c.bg,border:`1px solid ${c.bd}`,borderRadius:16,padding:"20px 22px",animationDelay:c.delay,position:"relative",overflow:"hidden"}}>
-                <div style={{position:"absolute",top:0,left:0,right:0,height:2,background:`linear-gradient(90deg,transparent,${c.color},transparent)`}}/>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                  <div>
-                    <div style={{fontSize:38,fontWeight:900,color:c.color,lineHeight:1,fontVariantNumeric:"tabular-nums"}}>{c.value}</div>
-                    <div style={{fontSize:11,color:"#64748b",fontWeight:700,marginTop:6,textTransform:"uppercase",letterSpacing:".06em"}}>{c.label}</div>
-                  </div>
-                  <div style={{width:44,height:44,borderRadius:12,background:`${c.color}18`,color:c.color,display:"flex",alignItems:"center",justifyContent:"center"}}>{c.icon}</div>
+              <div key={i} className="dash-card" style={{background:"#1a2235",border:"1px solid #242d45",borderTop:`3px solid ${c.color}`,borderRadius:14,padding:"22px 24px",animationDelay:c.delay}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
+                  <div style={{width:42,height:42,borderRadius:11,background:`${c.color}18`,color:c.color,display:"flex",alignItems:"center",justifyContent:"center"}}>{c.icon}</div>
+                  {c.pct!==null&&<span style={{background:`${c.color}15`,color:c.color,fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:20,border:`1px solid ${c.color}30`}}>{c.pct}%</span>}
                 </div>
+                <div style={{fontSize:46,fontWeight:900,color:"#f8fafc",lineHeight:1,fontVariantNumeric:"tabular-nums",letterSpacing:"-.03em"}}>{c.value}</div>
+                <div style={{fontSize:12,color:"#64748b",fontWeight:600,marginTop:8,letterSpacing:".01em"}}>{c.label}</div>
                 {c.pct!==null&&(
                   <div style={{marginTop:14}}>
-                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
-                      <span style={{fontSize:10,color:"#475569",fontWeight:600,textTransform:"uppercase"}}>do total</span>
-                      <span style={{fontSize:11,color:c.color,fontWeight:700}}>{c.pct}%</span>
-                    </div>
-                    <div style={{height:4,background:"rgba(255,255,255,.05)",borderRadius:2,overflow:"hidden"}}>
-                      <div className="dash-bar" style={{height:"100%",width:`${c.pct}%`,background:`linear-gradient(90deg,${c.color}88,${c.color})`,borderRadius:2,animationDelay:c.delay}}/>
+                    <div style={{height:3,background:"rgba(255,255,255,.05)",borderRadius:2,overflow:"hidden"}}>
+                      <div className="dash-bar" style={{height:"100%",width:`${c.pct}%`,background:c.color,borderRadius:2,animationDelay:c.delay}}/>
                     </div>
                   </div>
                 )}
@@ -1068,20 +1046,20 @@
           {/* ── Row 2: Donut Global + Barras por Proposta ── */}
           <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1.8fr)",gap:20,marginBottom:20}}>
 
-            <div className="dash-card" style={{...S.card,animationDelay:".4s",display:"flex",flexDirection:"column"}}>
-              <div style={{padding:"15px 22px",borderBottom:"1px solid #1e293b"}}>
-                <h3 style={{margin:0,fontSize:14,fontWeight:700,color:"#f1f5f9"}}>Conclusão Geral</h3>
+            <div className="dash-card" style={{...S.card,animationDelay:".32s",display:"flex",flexDirection:"column"}}>
+              <div style={{padding:"16px 22px",borderBottom:"1px solid #242d45"}}>
+                <h3 style={{margin:0,fontSize:13,fontWeight:700,color:"#f1f5f9",letterSpacing:".01em"}}>Conclusão Geral</h3>
                 <p style={{margin:"2px 0 0",fontSize:11,color:"#475569"}}>Proporção de comissionamentos fechados</p>
               </div>
-              <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"28px 22px"}}>
-                <AnimatedDonut pct={globalPct} color={globalPct>=80?"#22c55e":globalPct>=50?"#3b82f6":"#f59e0b"} size={190} label="FECHADOS"/>
-                <div style={{display:"flex",gap:22,marginTop:22}}>
-                  {[{v:totFechados,l:"Fechados",c:"#22c55e"},{v:totAndamento,l:"Andamento",c:"#3b82f6"},{v:totMil,l:"Total",c:"#8b5cf6"}].map((x,i)=>(
+              <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"24px 22px"}}>
+                <AnimatedDonut pct={globalPct} color={globalPct>=80?"#10b981":globalPct>=50?"#3b82f6":"#f59e0b"} size={180} label="FECHADOS"/>
+                <div style={{display:"flex",gap:24,marginTop:20}}>
+                  {[{v:totFechados,l:"Fechados",c:"#10b981"},{v:totAndamento,l:"Andamento",c:"#f59e0b"},{v:totMil,l:"Total",c:"#8b5cf6"}].map((x,i)=>(
                     <React.Fragment key={i}>
-                      {i>0&&<div style={{width:1,background:"#1e293b"}}/>}
+                      {i>0&&<div style={{width:1,background:"#242d45"}}/>}
                       <div style={{textAlign:"center"}}>
-                        <div style={{fontSize:22,fontWeight:900,color:x.c}}>{x.v}</div>
-                        <div style={{fontSize:10,color:"#475569",textTransform:"uppercase",letterSpacing:".06em",fontWeight:600}}>{x.l}</div>
+                        <div style={{fontSize:24,fontWeight:900,color:"#f8fafc"}}>{x.v}</div>
+                        <div style={{fontSize:10,color:x.c,textTransform:"uppercase",letterSpacing:".06em",fontWeight:700,marginTop:2}}>{x.l}</div>
                       </div>
                     </React.Fragment>
                   ))}
@@ -1089,33 +1067,33 @@
               </div>
             </div>
 
-            <div className="dash-card" style={{...S.card,animationDelay:".5s"}}>
-              <div style={{padding:"15px 22px",borderBottom:"1px solid #1e293b"}}>
-                <h3 style={{margin:0,fontSize:14,fontWeight:700,color:"#f1f5f9"}}>Status por Proposta</h3>
+            <div className="dash-card" style={{...S.card,animationDelay:".4s"}}>
+              <div style={{padding:"16px 22px",borderBottom:"1px solid #242d45"}}>
+                <h3 style={{margin:0,fontSize:13,fontWeight:700,color:"#f1f5f9",letterSpacing:".01em"}}>Status por Proposta</h3>
                 <p style={{margin:"2px 0 0",fontSize:11,color:"#475569"}}>Militares fechados vs. em andamento</p>
               </div>
-              <div style={{padding:22}}>
+              <div style={{padding:"20px 22px"}}>
                 {propChartData.length===0?(
                   <div style={{textAlign:"center",padding:40,color:"#475569"}}>Nenhuma proposta cadastrada.</div>
                 ):(
-                  <div style={{display:"flex",flexDirection:"column",gap:22}}>
+                  <div style={{display:"flex",flexDirection:"column",gap:20}}>
                     {propChartData.map((p,i)=>{
                       const pF=p.total>0?(p.fechados/p.total)*100:0;
                       const pA=p.total>0?(p.andamento/p.total)*100:0;
                       return (
                         <div key={i}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:10}}>
                             <span style={{fontSize:13,fontWeight:700,color:"#e2e8f0"}}>{p.titulo}</span>
-                            <span style={{fontSize:11,color:"#475569"}}>{p.total} militar{p.total!==1?"es":""}</span>
+                            <span style={{fontSize:11,color:"#475569",background:"#242d45",padding:"2px 8px",borderRadius:5}}>{p.total} militar{p.total!==1?"es":""}</span>
                           </div>
-                          <div style={{height:20,background:"#0f172a",borderRadius:7,overflow:"hidden",display:"flex",border:"1px solid #1e293b"}}>
-                            {pF>0&&<div className="dash-bar" style={{width:`${pF}%`,background:"linear-gradient(90deg,#16a34a,#22c55e)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#fff",animationDelay:`${.5+i*.1}s`,overflow:"hidden"}}>{pF>14?p.fechados:""}</div>}
-                            {pA>0&&<div className="dash-bar" style={{width:`${pA}%`,background:"linear-gradient(90deg,#1d4ed8,#3b82f6)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#fff",animationDelay:`${.55+i*.1}s`,overflow:"hidden"}}>{pA>14?p.andamento:""}</div>}
+                          <div style={{height:8,background:"#0f1117",borderRadius:6,overflow:"hidden",display:"flex"}}>
+                            {pF>0&&<div className="dash-bar" style={{width:`${pF}%`,background:"#10b981",borderRadius:"6px 0 0 6px",animationDelay:`${.4+i*.1}s`}}/>}
+                            {pA>0&&<div className="dash-bar" style={{width:`${pA}%`,background:"#3b82f6",borderRadius:pF>0?"0 6px 6px 0":"6px",animationDelay:`${.45+i*.1}s`}}/>}
                           </div>
-                          <div style={{display:"flex",gap:14,marginTop:7,alignItems:"center"}}>
-                            <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:8,height:8,borderRadius:2,background:"#22c55e"}}/><span style={{fontSize:11,color:"#94a3b8"}}>Fechados: <strong style={{color:"#22c55e"}}>{p.fechados}</strong></span></div>
-                            <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:8,height:8,borderRadius:2,background:"#3b82f6"}}/><span style={{fontSize:11,color:"#94a3b8"}}>Andamento: <strong style={{color:"#3b82f6"}}>{p.andamento}</strong></span></div>
-                            <span style={{marginLeft:"auto",fontSize:11,color:"#22c55e",fontWeight:700}}>{Math.round(pF)}% concluído</span>
+                          <div style={{display:"flex",gap:16,marginTop:8,alignItems:"center"}}>
+                            <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:8,height:8,borderRadius:"50%",background:"#10b981"}}/><span style={{fontSize:11,color:"#64748b"}}>Fechados: <strong style={{color:"#f1f5f9"}}>{p.fechados}</strong></span></div>
+                            <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:8,height:8,borderRadius:"50%",background:"#3b82f6"}}/><span style={{fontSize:11,color:"#64748b"}}>Andamento: <strong style={{color:"#f1f5f9"}}>{p.andamento}</strong></span></div>
+                            <span style={{marginLeft:"auto",fontSize:11,color:"#10b981",fontWeight:700,background:"rgba(16,185,129,0.1)",padding:"2px 8px",borderRadius:5}}>{Math.round(pF)}% concluído</span>
                           </div>
                         </div>
                       );
@@ -1129,9 +1107,9 @@
           {/* ── Row 3: Progresso Individual + Economicidade ── */}
           <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1.6fr)",gap:20}}>
 
-            <div className="dash-card" style={{...S.card,animationDelay:".6s"}}>
-              <div style={{padding:"15px 22px",borderBottom:"1px solid #1e293b"}}>
-                <h3 style={{margin:0,fontSize:14,fontWeight:700,color:"#f1f5f9"}}>Progresso Individual</h3>
+            <div className="dash-card" style={{...S.card,animationDelay:".48s"}}>
+              <div style={{padding:"16px 22px",borderBottom:"1px solid #242d45"}}>
+                <h3 style={{margin:0,fontSize:13,fontWeight:700,color:"#f1f5f9",letterSpacing:".01em"}}>Progresso Individual</h3>
                 <p style={{margin:"2px 0 0",fontSize:11,color:"#475569"}}>Acompanhamento detalhado por militar</p>
               </div>
               <div style={{padding:22}}>
@@ -1166,17 +1144,17 @@
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
                       {[{lbl:"Executados",val:selectedMil.cumpDias,c:"#3b82f6"},{lbl:"Restantes",val:selectedMil.restantes,c:selectedMil.isFechado?"#22c55e":"#f59e0b"}].map((x,i)=>(
-                        <div key={i} style={{background:"#0f172a",padding:"12px 14px",borderRadius:10,border:"1px solid #1e293b"}}>
+                        <div key={i} style={{background:"#0f1117",padding:"12px 14px",borderRadius:10,border:"1px solid #242d45"}}>
                           <div style={{fontSize:10,color:"#475569",textTransform:"uppercase",fontWeight:700,letterSpacing:".06em",marginBottom:4}}>{x.lbl}</div>
-                          <div style={{fontSize:24,color:x.c,fontWeight:900}}>{x.val}</div>
-                          <div style={{fontSize:10,color:"#475569"}}>dias</div>
+                          <div style={{fontSize:28,color:"#f8fafc",fontWeight:900}}>{x.val}</div>
+                          <div style={{fontSize:10,color:x.c,fontWeight:600}}>dias</div>
                         </div>
                       ))}
                     </div>
-                    <div style={{padding:"10px 14px",background:"#0f172a",borderRadius:10,border:"1px solid #1e293b",fontSize:12,color:"#64748b"}}>
+                    <div style={{padding:"10px 14px",background:"#0f1117",borderRadius:10,border:"1px solid #242d45",fontSize:12,color:"#64748b"}}>
                       Meta: <strong style={{color:"#f1f5f9"}}>{selectedMil.targetDias} dias</strong>
                       <span style={{margin:"0 8px"}}>•</span>
-                      Valor: <strong style={{color:"#f1f5f9"}}>{fmtMoney(selectedMil.valTotal)}</strong>
+                      Valor: <strong style={{color:"#10b981"}}>{fmtMoney(selectedMil.valTotal)}</strong>
                     </div>
                   </div>
                 ):(
@@ -1188,12 +1166,12 @@
               </div>
             </div>
 
-            <div className="dash-card" style={{...S.card,animationDelay:".7s"}}>
-              <div style={{padding:"15px 22px",borderBottom:"1px solid #1e293b",display:"flex",alignItems:"center",gap:10}}>
-                <span style={{fontSize:20}}>⚖️</span>
+            <div className="dash-card" style={{...S.card,animationDelay:".56s"}}>
+              <div style={{padding:"16px 22px",borderBottom:"1px solid #242d45",display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:32,height:32,borderRadius:9,background:"rgba(16,185,129,0.12)",color:"#10b981",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>⚖️</div>
                 <div>
-                  <h3 style={{margin:0,fontSize:14,fontWeight:700,color:"#f1f5f9"}}>Princípio da Economicidade</h3>
-                  <p style={{margin:"2px 0 0",fontSize:11,color:"#475569"}}>Meta, executado e saldo de cada militar — filtre por proposta</p>
+                  <h3 style={{margin:0,fontSize:13,fontWeight:700,color:"#f1f5f9",letterSpacing:".01em"}}>Princípio da Economicidade</h3>
+                  <p style={{margin:"2px 0 0",fontSize:11,color:"#475569"}}>Meta, executado e saldo de cada militar</p>
                 </div>
               </div>
               <div style={{padding:"20px 22px"}}>
