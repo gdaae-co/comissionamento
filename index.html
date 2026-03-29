@@ -951,8 +951,8 @@
 
       const allMil = useMemo(() => propostas.flatMap(p => {
         const propStatus = getPropostaStatus(p.id, oficios);
-        if (propStatus === "negado") return []; // proposta negada: exclui do dashboard
-        const propAutorizada = propStatus === "autorizado";
+        if (propStatus !== "autorizado") return []; // só autorizado entra no dashboard
+        const propAutorizada = true;
         return (p.militares || []).map(m => {
         const modDias = (m.modulos || []).reduce((s, mod) => s + diffDays(mod.dataInicio, mod.dataFim), 0);
         const targetDias = modDias; // meta = total de dias da proposta
