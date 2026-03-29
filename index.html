@@ -943,11 +943,13 @@
       );
     }
 
-    function DashboardTab({ propostas }) {
+    function DashboardTab({ propostas, oficios }) {
       const [selectedMilId, setSelectedMilId] = useState("");
       const [selectedPropId, setSelectedPropId] = useState("");
 
-      const allMil = useMemo(() => propostas.flatMap(p => (p.militares || []).map(m => {
+      const allMil = useMemo(() => propostas.flatMap(p => {
+        const propAutorizada = getPropostaStatus(p.id, oficios) === "autorizado";
+        return (p.militares || []).map(m => {
         const modDias = (m.modulos || []).reduce((s, mod) => s + diffDays(mod.dataInicio, mod.dataFim), 0);
         const targetDias = modDias; // meta = total de dias da proposta
         const cumpDias = calcDiasOS(m.ordensServico, "Executado");
@@ -966,11 +968,13 @@
         const limiarEconomicidade = valAbertura + valFechamento;
         const atingiuEconomicidade = limiarEconomicidade > 0 && totalDiariasExec >= limiarEconomicidade;
         const faltaEconomicidade = Math.max(0, limiarEconomicidade - totalDiariasExec);
-        const isFechado = (targetDias > 0 && cumpDias >= targetDias) || atingiuEconomicidade;
+        // Só conta como fechado se a proposta estiver autorizada
+        const isFechado = propAutorizada && ((targetDias > 0 && cumpDias >= targetDias) || atingiuEconomicidade);
 
         return { ...m, _propTitulo: p.titulo, _propId: p.id, targetDias, cumpDias, restantes, isFechado, valTotal,
                  totalDiariasExec, limiarEconomicidade, atingiuEconomicidade, faltaEconomicidade };
-      })), [propostas]);
+      });
+      }), [propostas, oficios]);
 
       const totMil = allMil.length;
       const totFechados = allMil.filter(m => m.isFechado).length;
@@ -1672,7 +1676,20 @@
       return { totalAbertura: somaAb, totalFechamento: somaFe, totalAF: somaAb + somaFe, totalDiarias: somaDi };
     }
 
-    function PropostasTab({ propostas, setPropostas, efetivoDb, settings }) {
+    // Deriva o status da proposta a partir dos ofícios vinculados
+    const getPropostaStatus = (propId, oficios) => {
+      const ofs = (oficios || []).filter(o => o.propostaId === propId);
+      if (ofs.some(o => o.status === "autorizado")) return "autorizado";
+      if (ofs.length > 0 && ofs.every(o => o.status === "negado")) return "negado";
+      return "aguardando";
+    };
+    const PROPOSTA_STATUS_CFG = {
+      aguardando: { label: "Aguardando", color: "#f59e0b", bg: "rgba(245,158,11,0.12)" },
+      autorizado:  { label: "Autorizado",  color: "#22c55e", bg: "rgba(34,197,94,0.12)"  },
+      negado:      { label: "Negado",      color: "#ef4444", bg: "rgba(239,68,68,0.12)"  },
+    };
+
+    function PropostasTab({ propostas, setPropostas, efetivoDb, settings, oficios }) {
       const [editing, setEditing] = useState(null);
       const [viewProp, setViewProp] = useState(null);
       const [delProp, setDelProp] = useState(null);
@@ -1715,12 +1732,17 @@
             <div style={{ display: "grid", gap: 14 }}>
               {propostas.map(p => {
                 const totais = calcTotaisProposta(p);
+                const pStatus = getPropostaStatus(p.id, oficios);
+                const pStCfg  = PROPOSTA_STATUS_CFG[pStatus];
                 return (
-                  <div key={p.id} style={{ ...S.card, cursor: "pointer", transition: "border-color .2s" }} onClick={() => setViewProp(p)}>
+                  <div key={p.id} style={{ ...S.card, cursor: "pointer", transition: "border-color .2s", borderLeft: `3px solid ${pStCfg.color}` }} onClick={() => setViewProp(p)}>
                     <div style={{ padding: "20px 24px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
                       <div>
-                        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#f1f5f9" }}>{p.titulo || "Proposta sem título"}</h3>
-                        <p style={{ margin: "4px 0 0", fontSize: 12, color: "#64748b" }}>Criada em {fmtDate(p.dataCriacao)} · {p.militares.length} militar{p.militares.length !== 1 ? "es" : ""}</p>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#f1f5f9" }}>{p.titulo || "Proposta sem título"}</h3>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: pStCfg.color, background: pStCfg.bg, padding: "2px 8px", borderRadius: 4, textTransform: "uppercase", letterSpacing: ".04em" }}>{pStCfg.label}</span>
+                        </div>
+                        <p style={{ margin: "0 0 0", fontSize: 12, color: "#64748b" }}>Criada em {fmtDate(p.dataCriacao)} · {p.militares.length} militar{p.militares.length !== 1 ? "es" : ""}</p>
                         <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
                           {p.militares.slice(0, 5).map(m => (
                             <span key={m.id} style={{ fontSize: 11, fontWeight: 600, color: "#93c5fd", background: "rgba(59,130,246,0.12)", padding: "2px 8px", borderRadius: 4 }}>{m.postoGrad} {m.nomeGuerra || "—"}</span>
@@ -4266,9 +4288,9 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
             ) : (
               <>
                 <main style={S.main}>
-                  {tab === "dashboard"  && <DashboardTab propostas={propostasAtivas} />}
+                  {tab === "dashboard"  && <DashboardTab propostas={propostasAtivas} oficios={data.oficios || []} />}
                   {tab === "consulta"   && <ConsultaTab propostas={propostasAtivas} oficios={data.oficios || []} logo={data.settings?.logo} />}
-                  {tab === "propostas"  && <PropostasTab propostas={propostasAtivas} setPropostas={setPropostas} efetivoDb={data.efetivoDb} settings={data.settings} />}
+                  {tab === "propostas"  && <PropostasTab propostas={propostasAtivas} setPropostas={setPropostas} efetivoDb={data.efetivoDb} settings={data.settings} oficios={data.oficios || []} />}
                   {tab === "oficios"    && <OficiosTab oficios={data.oficios || []} setOficios={setOficios} propostas={propostasAtivas} />}
                   {tab === "pag"        && <PagTab propostas={propostasAtivas} setPropostas={setPropostas} />}
                   {tab === "portaria"   && <PortariaTab propostas={propostasAtivas} setPropostas={setPropostas} />}
