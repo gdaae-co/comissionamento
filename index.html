@@ -3651,6 +3651,8 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
       const [tab, setTab] = useState("dashboard");
       const [user, setUser] = useState(null);
       const [authLoading, setAuthLoading] = useState(true);
+      // Garante que o save só ocorre após dados terem sido carregados com sucesso do Firestore
+      const safeToSave = React.useRef(false);
       const [showSettings, setShowSettings] = useState(false);
       const [showArchive, setShowArchive] = useState(false);
 
@@ -3676,13 +3678,14 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
               loaded = { ...loaded, settings: { ...(loaded.settings || {}), ...assets } };
             }
             if (Object.keys(loaded).length > 0) setData(d => ({ ...d, ...loaded }));
+            safeToSave.current = true; // só libera save após load bem-sucedido
           } catch (e) { console.log("Erro ao inicializar dados:", e); }
           setLoaded(true);
         })();
       }, []);
 
       useEffect(() => {
-        if (!loaded || !user) return;
+        if (!loaded || !user || !safeToSave.current) return;
         (async () => {
           try {
             // Separa logo e efetivoDb (dados grandes) em documento próprio
