@@ -952,7 +952,6 @@
         const targetDias = modDias; // meta = total de dias da proposta
         const cumpDias = calcDiasOS(m.ordensServico, "Executado");
         const restantes = Math.max(0, targetDias - cumpDias);
-        const isFechado = targetDias > 0 && cumpDias >= targetDias;
         const valAbertura  = parseFloat(m.valorAbertura)  || 0;
         const valFechamento= parseFloat(m.valorFechamento) || 0;
         const valTotal = valAbertura + valFechamento;
@@ -967,6 +966,7 @@
         const limiarEconomicidade = valAbertura + valFechamento;
         const atingiuEconomicidade = limiarEconomicidade > 0 && totalDiariasExec >= limiarEconomicidade;
         const faltaEconomicidade = Math.max(0, limiarEconomicidade - totalDiariasExec);
+        const isFechado = (targetDias > 0 && cumpDias >= targetDias) || atingiuEconomicidade;
 
         return { ...m, _propTitulo: p.titulo, _propId: p.id, targetDias, cumpDias, restantes, isFechado, valTotal,
                  totalDiariasExec, limiarEconomicidade, atingiuEconomicidade, faltaEconomicidade };
@@ -1249,7 +1249,12 @@
         const diasCumpridos = calcDiasOS(oss, "Executado");
         const diasPlanejados = calcDiasOS(oss, "Planejado");
         const diasRestantes = Math.max(0, targetDias - diasCumpridos);
-        const isFechado = targetDias > 0 && diasCumpridos >= targetDias;
+        const _valAb = parseFloat(mil.valorAbertura) || 0;
+        const _valFe = parseFloat(mil.valorFechamento) || 0;
+        const _limiar = _valAb + _valFe;
+        const _diariasExec = oss.filter(o => o.status === "Executado").reduce((acc, os) => { const d = diffDays(os.dataInicio, os.dataFim); return d > 0 ? acc + getValorDiaria(mil.postoGrad, os.localidade) * (d - 0.5) : acc; }, 0);
+        const _atingiuEcono = _limiar > 0 && _diariasExec >= _limiar;
+        const isFechado = (targetDias > 0 && diasCumpridos >= targetDias) || _atingiuEcono;
 
         // OMs Adidos da Missão
         const oMsList = [...new Set(mil._propModulos.map(m => m.omAdido).filter(Boolean))].join(", ") || "—";
@@ -1608,7 +1613,9 @@
               {filtered.map(mil => {
                 const targetDias = parseInt(mil.diasMinimos) || (mil.modulos || []).reduce((s, m) => s + diffDays(m.dataInicio, m.dataFim), 0);
                 const cumpDias = calcDiasOS(mil.ordensServico, "Executado");
-                const isFechado = targetDias > 0 && cumpDias >= targetDias;
+                const _lim3 = (parseFloat(mil.valorAbertura)||0) + (parseFloat(mil.valorFechamento)||0);
+                const _exec3 = (mil.ordensServico||[]).filter(o=>o.status==="Executado").reduce((a,o)=>{const d=diffDays(o.dataInicio,o.dataFim);return d>0?a+getValorDiaria(mil.postoGrad,o.localidade)*(d-0.5):a;},0);
+                const isFechado = (targetDias > 0 && cumpDias >= targetDias) || (_lim3 > 0 && _exec3 >= _lim3);
 
                 return (
                   <div key={mil.id + mil._propId} style={{ ...S.card, cursor: "pointer", transition: "border-color .2s" }} onClick={() => setSelectedMil(mil)}>
@@ -2622,7 +2629,9 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
 
             const targetDias = parseInt(mil.diasMinimos) || totalDias;
             const diasCumpridos = calcDiasOS(mil.ordensServico, "Executado");
-            const isFechado = targetDias > 0 && diasCumpridos >= targetDias;
+            const _limPag = valAb + valFe;
+            const _execPag = (mil.ordensServico||[]).filter(o=>o.status==="Executado").reduce((a,o)=>{const d=diffDays(o.dataInicio,o.dataFim);return d>0?a+getValorDiaria(mil.postoGrad,o.localidade)*(d-0.5):a;},0);
+            const isFechado = (targetDias > 0 && diasCumpridos >= targetDias) || (_limPag > 0 && _execPag >= _limPag);
 
             return (
               <div key={mil.id} style={{ ...S.card, marginBottom: 16 }}>
@@ -3344,7 +3353,6 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
         const diasCumpridos    = calcDiasOS(oss, "Executado");
         const diasPlanejados   = calcDiasOS(oss, "Planejado");
         const diasRestantes    = Math.max(0, targetDias - diasCumpridos);
-        const isFechado        = targetDias > 0 && diasCumpridos >= targetDias;
         const ossExec          = oss.filter(o => o.status === "Executado");
         const ossPlanj         = oss.filter(o => o.status === "Planejado");
         const totalDiariasExec = ossExec.reduce((acc, os) => {
@@ -3355,6 +3363,9 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
           const d = diffDays(os.dataInicio, os.dataFim);
           return d > 0 ? acc + getValorDiaria(mil.postoGrad, os.localidade) * (d - 0.5) : acc;
         }, 0);
+        const _limOS = (parseFloat(mil.valorAbertura)||0) + (parseFloat(mil.valorFechamento)||0);
+        const _atingiuOS = _limOS > 0 && totalDiariasExec >= _limOS;
+        const isFechado = (targetDias > 0 && diasCumpridos >= targetDias) || _atingiuOS;
         return { oss, targetDias, diasCumpridos, diasPlanejados, diasRestantes, isFechado,
                  totalDiariasExec, totalDiariasPlanj,
                  totalDiariasGeral: totalDiariasExec + totalDiariasPlanj };
@@ -3426,7 +3437,9 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                         const totalDiasModulos = (mil.modulos || []).reduce((s, m) => s + diffDays(m.dataInicio, m.dataFim), 0);
                         const targetDias = parseInt(mil.diasMinimos) || totalDiasModulos;
                         const diasCump = calcDiasOS(mil.ordensServico || [], "Executado");
-                        const fechado  = targetDias > 0 && diasCump >= targetDias;
+                        const _limLst = (parseFloat(mil.valorAbertura)||0) + (parseFloat(mil.valorFechamento)||0);
+                        const _execLst = (mil.ordensServico||[]).filter(o=>o.status==="Executado").reduce((a,o)=>{const d=diffDays(o.dataInicio,o.dataFim);return d>0?a+getValorDiaria(mil.postoGrad,o.localidade)*(d-0.5):a;},0);
+                        const fechado  = (targetDias > 0 && diasCump >= targetDias) || (_limLst > 0 && _execLst >= _limLst);
                         return (
                           <button
                             key={key}
@@ -3688,7 +3701,9 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
         const modDias = (mil.modulos || []).reduce((s, m) => s + diffDays(m.dataInicio, m.dataFim), 0);
         const target  = modDias;
         const cumpr   = calcDiasOS(mil.ordensServico, "Executado");
-        return target > 0 && cumpr >= target;
+        const limiar  = (parseFloat(mil.valorAbertura)||0) + (parseFloat(mil.valorFechamento)||0);
+        const diarias = (mil.ordensServico||[]).filter(o=>o.status==="Executado").reduce((a,o)=>{const d=diffDays(o.dataInicio,o.dataFim);return d>0?a+getValorDiaria(mil.postoGrad,o.localidade)*(d-0.5):a;},0);
+        return (target > 0 && cumpr >= target) || (limiar > 0 && diarias >= limiar);
       };
 
       const arquivarMilitar = (propId, milId) => {
