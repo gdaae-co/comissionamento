@@ -14,10 +14,56 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800;9..40,900&display=swap" rel="stylesheet">
+
   <style>
     body { margin: 0; padding: 0; background: #0f1117; }
-    
-    /* Estilos para a Impressão Oficial */
+    *, *::before, *::after { box-sizing: border-box; }
+
+    /* ── Seleção de texto ── */
+    ::selection { background: rgba(16,185,129,0.22); color: #f1f5f9; }
+
+    /* ── Scrollbar customizada ── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #242d45; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+    /* ── Focus ring acessível ── */
+    button:focus-visible { outline: 2px solid rgba(16,185,129,0.5) !important; outline-offset: 2px; border-radius: 6px; }
+
+    /* ── Modal: animação de entrada ── */
+    @keyframes app-modal-enter { from { opacity:0; transform:scale(0.97) translateY(8px); } to { opacity:1; transform:scale(1) translateY(0); } }
+    .app-modal { animation: app-modal-enter 0.2s cubic-bezier(0.34,1.4,0.64,1) both; }
+
+    /* ── Sidebar: hover e estado ativo ── */
+    .nav-btn { border-left: 2px solid transparent !important; padding-left: 10px !important; }
+    .nav-btn:hover { background: rgba(255,255,255,0.04) !important; color: #94a3b8 !important; border-left-color: rgba(148,163,184,0.2) !important; }
+    .nav-btn.nav-active { background: rgba(16,185,129,0.1) !important; color: #10b981 !important; border-left-color: #10b981 !important; font-weight: 700 !important; }
+
+    /* ── Tabela: hover nas linhas ── */
+    .data-row:hover > td { background: rgba(26,34,53,0.85) !important; }
+    tbody tr:hover > td { background: rgba(20,30,50,0.7) !important; }
+
+    /* ── Botão primário: hover ── */
+    .pri-btn { transition: all 0.2s ease !important; }
+    .pri-btn:hover:not(:disabled) { transform: translateY(-1px) !important; box-shadow: 0 6px 24px rgba(16,185,129,0.4) !important; filter: brightness(1.07) !important; }
+    .pri-btn:active:not(:disabled) { transform: translateY(0) !important; }
+
+    /* ── Botão secundário: hover ── */
+    .sec-btn { transition: all 0.18s ease !important; }
+    .sec-btn:hover { background: rgba(255,255,255,0.04) !important; border-color: #475569 !important; color: #e2e8f0 !important; }
+
+    /* ── Inputs: foco com anel verde ── */
+    .app-inp:focus { border-color: rgba(16,185,129,0.45) !important; box-shadow: 0 0 0 3px rgba(16,185,129,0.1) !important; outline: none !important; }
+
+    /* ── Cards: hover suave ── */
+    .hover-card { transition: transform 0.2s ease, box-shadow 0.2s ease !important; }
+    .hover-card:hover { transform: translateY(-2px) !important; box-shadow: 0 10px 36px rgba(0,0,0,0.35) !important; }
+
+    /* ── Estilos para a Impressão Oficial */
     @media print {
       body { background: #fff !important; color: #000 !important; }
       .no-print { display: none !important; }
@@ -376,6 +422,30 @@
         });
     }
 
+    // ─── Retorna o posto/grad do militar em uma data específica (considera promoções) ───
+    function getMilPostoNaData(mil, dataStr) {
+      const promocoes = mil.promocoes;
+      if (!promocoes || promocoes.length === 0) return mil.postoGrad;
+      const sorted = [...promocoes]
+        .filter(p => p.dataPromocao && p.postoNovo)
+        .sort((a, b) => a.dataPromocao.localeCompare(b.dataPromocao));
+      const before = sorted.filter(p => p.dataPromocao <= (dataStr || ""));
+      if (before.length === 0) return mil.postoGradInicial || mil.postoGrad;
+      return before[before.length - 1].postoNovo;
+    }
+
+    // ─── Calcula o subtotal de diárias de uma OS (considera promoção + pernoites de trânsito) ───
+    function calcSubtotalOS(mil, os) {
+      const d = diffDays(os.dataInicio, os.dataFim);
+      if (d <= 0) return 0;
+      const posto = getMilPostoNaData(mil, os.dataInicio);
+      let total = getValorDiaria(posto, os.localidade) * (d - 0.5);
+      if (os.tipoDeslocamento === "Terrestre" && os.pernoitesTransito && os.pernoitesTransito.length > 0) {
+        total += os.pernoitesTransito.reduce((acc, p) => acc + (p.localidade ? getValorDiaria(posto, p.localidade) : 0), 0);
+      }
+      return total;
+    }
+
     /* ─── Icons ─── */
     const I = {
       shield: <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M12 2l7 4v5c0 5.25-3.5 9.74-7 11-3.5-1.26-7-5.75-7-11V6l7-4z"/></svg>,
@@ -401,7 +471,8 @@
       logout: <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>,
       settings: <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>,
       upload: <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>,
-      print: <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+      print: <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>,
+      flag: <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M4 21V4m0 0l16 5-16 6V4z"/></svg>
     };
 
     /* ─── Shared UI ─── */
@@ -409,7 +480,7 @@
       if (!open) return null;
       return (
         <div style={S.overlay} onClick={onClose} className="no-print">
-          <div style={{ ...S.modal, maxWidth: width }} onClick={e => e.stopPropagation()}>
+          <div className="app-modal" style={{ ...S.modal, maxWidth: width }} onClick={e => e.stopPropagation()}>
             <div style={S.modalHead}>
               <h2 style={S.modalTitle}>{title}</h2>
               <button style={S.iconBtn} onClick={onClose}>{I.x}</button>
@@ -965,10 +1036,7 @@
         // Economicidade: soma das diárias das OS executadas
         const totalDiariasExec = (m.ordensServico || [])
           .filter(os => os.status === "Executado")
-          .reduce((acc, os) => {
-            const d = diffDays(os.dataInicio, os.dataFim);
-            return d > 0 ? acc + getValorDiaria(m.postoGrad, os.localidade) * (d - 0.5) : acc;
-          }, 0);
+          .reduce((acc, os) => acc + calcSubtotalOS(m, os), 0);
         const limiarEconomicidade = valAbertura + valFechamento;
         const atingiuEconomicidade = limiarEconomicidade > 0 && totalDiariasExec >= limiarEconomicidade;
         const faltaEconomicidade = Math.max(0, limiarEconomicidade - totalDiariasExec);
@@ -1260,7 +1328,7 @@
         const _valAb = parseFloat(mil.valorAbertura) || 0;
         const _valFe = parseFloat(mil.valorFechamento) || 0;
         const _limiar = _valAb + _valFe;
-        const _diariasExec = oss.filter(o => o.status === "Executado").reduce((acc, os) => { const d = diffDays(os.dataInicio, os.dataFim); return d > 0 ? acc + getValorDiaria(mil.postoGrad, os.localidade) * (d - 0.5) : acc; }, 0);
+        const _diariasExec = oss.filter(o => o.status === "Executado").reduce((acc, os) => acc + calcSubtotalOS(mil, os), 0);
         const _atingiuEcono = _limiar > 0 && _diariasExec >= _limiar;
         const isFechado = (targetDias > 0 && diasCumpridos >= targetDias) || _atingiuEcono;
 
@@ -1622,7 +1690,7 @@
                 const targetDias = parseInt(mil.diasMinimos) || (mil.modulos || []).reduce((s, m) => s + diffDays(m.dataInicio, m.dataFim), 0);
                 const cumpDias = calcDiasOS(mil.ordensServico, "Executado");
                 const _lim3 = (parseFloat(mil.valorAbertura)||0) + (parseFloat(mil.valorFechamento)||0);
-                const _exec3 = (mil.ordensServico||[]).filter(o=>o.status==="Executado").reduce((a,o)=>{const d=diffDays(o.dataInicio,o.dataFim);return d>0?a+getValorDiaria(mil.postoGrad,o.localidade)*(d-0.5):a;},0);
+                const _exec3 = (mil.ordensServico||[]).filter(o=>o.status==="Executado").reduce((a,o)=>a+calcSubtotalOS(mil,o),0);
                 const isFechado = (targetDias > 0 && cumpDias >= targetDias) || (_lim3 > 0 && _exec3 >= _lim3);
 
                 return (
@@ -2389,6 +2457,73 @@ ${textoLimitado}`;
                 </div>
               </div>
 
+              {/* PROMOÇÃO DURANTE O COMISSIONAMENTO */}
+              {(() => {
+                const OFICIAIS = ["Cel","TC","Maj","Cap","1º Ten","2º Ten","Asp"];
+                const isOficial = (posto) => OFICIAIS.includes(posto);
+                const dataPromocaoPadrao = (posto) => {
+                  const ano = new Date().getFullYear();
+                  return isOficial(posto) ? `${ano}-08-31` : `${ano}-08-01`;
+                };
+                const promocoes = mil.promocoes || [];
+                const addPromocao = () => setProp(p => ({ ...p, militares: p.militares.map(m => m.id !== mil.id ? m : { ...m, promocoes: [...(m.promocoes||[]), { id: uid(), postoNovo: m.postoGrad, dataPromocao: dataPromocaoPadrao(m.postoGrad) }] }) }));
+                const removePromocao = (pid) => setProp(p => ({ ...p, militares: p.militares.map(m => m.id !== mil.id ? m : { ...m, promocoes: (m.promocoes||[]).filter(pr => pr.id !== pid) }) }));
+                const updatePromocao = (pid, field, val) => setProp(p => ({ ...p, militares: p.militares.map(m => m.id !== mil.id ? m : { ...m, promocoes: (m.promocoes||[]).map(pr => pr.id === pid ? { ...pr, [field]: val } : pr) }) }));
+                return (
+                  <div style={{ marginTop: 16 }}>
+                    <div style={{ background: "rgba(167,139,250,0.05)", border: "1px solid rgba(167,139,250,0.2)", borderRadius: 10, padding: "12px 16px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <div>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: "#a78bfa", textTransform: "uppercase", letterSpacing: ".05em" }}>⬆ Promoção durante o Comissionamento</span>
+                          <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                            Oficiais: promovidos em <strong style={{ color: "#94a3b8" }}>31/08</strong> · Graduados: <strong style={{ color: "#94a3b8" }}>01/08</strong>
+                          </div>
+                        </div>
+                        <button style={{ ...S.btnPri, padding: "5px 12px", fontSize: 11 }} onClick={addPromocao}>{I.plus} Registrar Promoção</button>
+                      </div>
+                      {promocoes.length === 0 ? (
+                        <p style={{ fontSize: 12, color: "#64748b", margin: 0 }}>Nenhuma promoção registrada. Se o militar for promovido durante o período, registre aqui — a data é preenchida automaticamente.</p>
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {promocoes.map((pr) => {
+                            // Posto anterior: o último posto antes desta promoção (ou o posto inicial do militar)
+                            const postoAnterior = mil.postoGradInicial || mil.postoGrad;
+                            const postoNovo = pr.postoNovo || mil.postoGrad;
+                            // Impacto nas diárias (exemplo: Brasília)
+                            const dAntes = getValorDiaria(postoAnterior, "Brasília-DF");
+                            const dDepois = getValorDiaria(postoNovo, "Brasília-DF");
+                            const mudouGrupo = getGrupoDiaria(postoAnterior) !== getGrupoDiaria(postoNovo);
+                            return (
+                              <div key={pr.id} style={{ background: "rgba(0,0,0,0.2)", borderRadius: 8, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                  <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700, whiteSpace: "nowrap" }}>Novo posto:</span>
+                                  <select style={{ ...S.inp, flex: 1 }} value={postoNovo} onChange={e => updatePromocao(pr.id, "postoNovo", e.target.value)}>
+                                    {POSTOS.map(p => <option key={p}>{p}</option>)}
+                                  </select>
+                                  <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700, whiteSpace: "nowrap" }}>Data:</span>
+                                  <input type="date" style={{ ...S.inp, flex: 1 }} value={pr.dataPromocao || ""} onChange={e => updatePromocao(pr.id, "dataPromocao", e.target.value)} />
+                                  <button style={{ ...S.actBtn, color: "#ef4444", padding: 3 }} onClick={() => removePromocao(pr.id)}>{I.x}</button>
+                                </div>
+                                {mudouGrupo && (
+                                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", padding: "6px 10px", background: "rgba(167,139,250,0.08)", borderRadius: 6, alignItems: "center" }}>
+                                    <span style={{ fontSize: 10, color: "#64748b", fontWeight: 700, textTransform: "uppercase" }}>Impacto nas diárias (BSB):</span>
+                                    <span style={{ fontSize: 12, color: "#94a3b8" }}>{postoAnterior} <strong style={{ color: "#ef4444" }}>{fmtMoney(dAntes)}/dia</strong></span>
+                                    <span style={{ fontSize: 11, color: "#475569" }}>→</span>
+                                    <span style={{ fontSize: 12, color: "#94a3b8" }}>{postoNovo} <strong style={{ color: "#22c55e" }}>{fmtMoney(dDepois)}/dia</strong></span>
+                                    <span style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b" }}>(+{fmtMoney(dDepois - dAntes)}/dia)</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                          <p style={{ fontSize: 11, color: "#a78bfa", margin: "4px 0 0" }}>💡 OS emitidas a partir da data de promoção usarão automaticamente o novo posto para cálculo de diárias.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* RESUMO E CALCULADORA (mantido igual ao original) */}
               {/* ... (todo o bloco de resumo com diárias, ajuda de custo, totais, etc.) ... */}
 
@@ -2656,7 +2791,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
             const targetDias = parseInt(mil.diasMinimos) || totalDias;
             const diasCumpridos = calcDiasOS(mil.ordensServico, "Executado");
             const _limPag = valAb + valFe;
-            const _execPag = (mil.ordensServico||[]).filter(o=>o.status==="Executado").reduce((a,o)=>{const d=diffDays(o.dataInicio,o.dataFim);return d>0?a+getValorDiaria(mil.postoGrad,o.localidade)*(d-0.5):a;},0);
+            const _execPag = (mil.ordensServico||[]).filter(o=>o.status==="Executado").reduce((a,o)=>a+calcSubtotalOS(mil,o),0);
             const isFechado = (targetDias > 0 && diasCumpridos >= targetDias) || (_limPag > 0 && _execPag >= _limPag);
 
             return (
@@ -3299,7 +3434,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
        ORDENS DE SERVIÇO TAB
        ═══════════════════════════════════════ */
     function emptyOS() {
-      return { id: uid(), numero: "", missaoCurso: "", localidade: "", dataInicio: "", dataFim: "", status: "Planejado" };
+      return { id: uid(), numero: "", missaoCurso: "", localidade: "", dataInicio: "", dataFim: "", status: "Planejado", tipoDeslocamento: "Aereo", pernoitesTransito: [] };
     }
 
     function OSTab({ propostas, setPropostas, oficios }) {
@@ -3381,14 +3516,8 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
         const diasRestantes    = Math.max(0, targetDias - diasCumpridos);
         const ossExec          = oss.filter(o => o.status === "Executado");
         const ossPlanj         = oss.filter(o => o.status === "Planejado");
-        const totalDiariasExec = ossExec.reduce((acc, os) => {
-          const d = diffDays(os.dataInicio, os.dataFim);
-          return d > 0 ? acc + getValorDiaria(mil.postoGrad, os.localidade) * (d - 0.5) : acc;
-        }, 0);
-        const totalDiariasPlanj = ossPlanj.reduce((acc, os) => {
-          const d = diffDays(os.dataInicio, os.dataFim);
-          return d > 0 ? acc + getValorDiaria(mil.postoGrad, os.localidade) * (d - 0.5) : acc;
-        }, 0);
+        const totalDiariasExec = ossExec.reduce((acc, os) => acc + calcSubtotalOS(mil, os), 0);
+        const totalDiariasPlanj = ossPlanj.reduce((acc, os) => acc + calcSubtotalOS(mil, os), 0);
         const _limOS = (parseFloat(mil.valorAbertura)||0) + (parseFloat(mil.valorFechamento)||0);
         const _atingiuOS = _limOS > 0 && totalDiariasExec >= _limOS;
         const isFechado = (targetDias > 0 && diasCumpridos >= targetDias) || _atingiuOS;
@@ -3464,7 +3593,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                         const targetDias = parseInt(mil.diasMinimos) || totalDiasModulos;
                         const diasCump = calcDiasOS(mil.ordensServico || [], "Executado");
                         const _limLst = (parseFloat(mil.valorAbertura)||0) + (parseFloat(mil.valorFechamento)||0);
-                        const _execLst = (mil.ordensServico||[]).filter(o=>o.status==="Executado").reduce((a,o)=>{const d=diffDays(o.dataInicio,o.dataFim);return d>0?a+getValorDiaria(mil.postoGrad,o.localidade)*(d-0.5):a;},0);
+                        const _execLst = (mil.ordensServico||[]).filter(o=>o.status==="Executado").reduce((a,o)=>a+calcSubtotalOS(mil,o),0);
                         const fechado  = (targetDias > 0 && diasCump >= targetDias) || (_limLst > 0 && _execLst >= _limLst);
                         return (
                           <button
@@ -3559,13 +3688,21 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                       {cm.oss.map((os, osIdx) => {
-                        const diasOS    = diffDays(os.dataInicio, os.dataFim);
-                        const valorUnit = diasOS > 0 ? getValorDiaria(selMil.postoGrad, os.localidade) : 0;
-                        const subtotal  = diasOS > 0 ? valorUnit * (diasOS - 0.5) : 0;
-                        const grupo     = getGrupoDiaria(selMil.postoGrad);
-                        const col       = getColunaDiaria(os.localidade);
-                        const colLabel  = col === 0 ? "BSB/MAO/RJ/SP" : col === 1 ? "Capital" : "Demais";
-                        const isExec    = os.status === "Executado";
+                        const diasOS     = diffDays(os.dataInicio, os.dataFim);
+                        const postoNaData = getMilPostoNaData(selMil, os.dataInicio);
+                        const valorUnit  = diasOS > 0 ? getValorDiaria(postoNaData, os.localidade) : 0;
+                        const subtotalPrincipal = diasOS > 0 ? valorUnit * (diasOS - 0.5) : 0;
+                        const pernoites  = os.pernoitesTransito || [];
+                        const subtotalTransito = pernoites.reduce((a, p) => a + (p.localidade ? getValorDiaria(postoNaData, p.localidade) : 0), 0);
+                        const subtotal   = subtotalPrincipal + subtotalTransito;
+                        const grupo      = getGrupoDiaria(postoNaData);
+                        const col        = getColunaDiaria(os.localidade);
+                        const colLabel   = col === 0 ? "BSB/MAO/RJ/SP" : col === 1 ? "Capital" : "Demais";
+                        const isExec     = os.status === "Executado";
+                        const isTerr     = os.tipoDeslocamento === "Terrestre";
+                        const addPernoite = () => updateOS(selMil._propId, selMil.id, os.id, "pernoitesTransito", [...pernoites, { id: uid(), localidade: "", data: "" }]);
+                        const removePernoite = (pid) => updateOS(selMil._propId, selMil.id, os.id, "pernoitesTransito", pernoites.filter(p => p.id !== pid));
+                        const updatePernoite = (pid, field, val) => updateOS(selMil._propId, selMil.id, os.id, "pernoitesTransito", pernoites.map(p => p.id === pid ? { ...p, [field]: val } : p));
                         return (
                           <div key={os.id} style={{ ...S.card, border: `1px solid ${isExec ? "rgba(34,197,94,0.2)" : "#1e293b"}` }}>
                             {/* Cabeçalho da OS */}
@@ -3579,6 +3716,8 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                                   background: isExec ? "rgba(34,197,94,0.12)" : "rgba(167,139,250,0.12)" }}>
                                   {isExec ? "✔ Executado" : "◷ Planejado"}
                                 </span>
+                                {isTerr && <span style={{ fontSize: 10, fontWeight: 700, color: "#fb923c", background: "rgba(251,146,60,0.12)", padding: "2px 7px", borderRadius: 4 }}>🚗 Terrestre</span>}
+                                {postoNaData !== selMil.postoGrad && <span style={{ fontSize: 10, fontWeight: 700, color: "#a78bfa", background: "rgba(167,139,250,0.12)", padding: "2px 7px", borderRadius: 4 }}>Posto na data: {postoNaData}</span>}
                                 {diasOS > 0 && (
                                   <span style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b" }}>
                                     {fmtMoney(subtotal)}
@@ -3611,7 +3750,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                                     onChange={e => updateOS(selMil._propId, selMil.id, os.id, "missaoCurso", e.target.value)}
                                     placeholder="Ex: CADOM, OOM-III, Op Ágata..." />
                                 </FG>
-                                <FG label="Localidade" flex>
+                                <FG label="Localidade (destino)" flex>
                                   <input style={S.inp} list="cidades-list" value={os.localidade || ""}
                                     onChange={e => updateOS(selMil._propId, selMil.id, os.id, "localidade", e.target.value)}
                                     placeholder="Ex: Brasília-DF" />
@@ -3628,6 +3767,53 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                                 </FG>
                               </div>
 
+                              {/* Tipo de Deslocamento */}
+                              <FG label="Tipo de Deslocamento">
+                                <div style={{ display: "flex", gap: 10 }}>
+                                  {[["Aereo","✈ Aéreo"],["Terrestre","🚗 Terrestre"]].map(([val, lbl]) => (
+                                    <button key={val} onClick={() => updateOS(selMil._propId, selMil.id, os.id, "tipoDeslocamento", val)}
+                                      style={{ padding: "7px 16px", borderRadius: 8, border: `1px solid ${os.tipoDeslocamento===val||(!os.tipoDeslocamento&&val==="Aereo") ? "#10b981" : "rgba(255,255,255,0.1)"}`,
+                                        background: os.tipoDeslocamento===val||(!os.tipoDeslocamento&&val==="Aereo") ? "rgba(16,185,129,0.12)" : "transparent",
+                                        color: os.tipoDeslocamento===val||(!os.tipoDeslocamento&&val==="Aereo") ? "#10b981" : "#64748b", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                                      {lbl}
+                                    </button>
+                                  ))}
+                                </div>
+                              </FG>
+
+                              {/* Pernoites de Trânsito (apenas terrestre) */}
+                              {isTerr && (
+                                <div style={{ background: "rgba(251,146,60,0.05)", border: "1px solid rgba(251,146,60,0.2)", borderRadius: 10, padding: "12px 14px" }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                                    <span style={{ fontSize: 11, fontWeight: 700, color: "#fb923c", textTransform: "uppercase", letterSpacing: ".05em" }}>🌙 Pernoites em Trânsito</span>
+                                    <button style={{ ...S.btnPri, padding: "5px 12px", fontSize: 11 }} onClick={addPernoite}>{I.plus} Adicionar</button>
+                                  </div>
+                                  {pernoites.length === 0 ? (
+                                    <p style={{ fontSize: 12, color: "#64748b", margin: 0 }}>Nenhum pernoite de trânsito. Clique em "Adicionar" para registrar cidades intermediárias.</p>
+                                  ) : (
+                                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                      {pernoites.map((p, pi) => {
+                                        const vDiaria = p.localidade ? getValorDiaria(postoNaData, p.localidade) : 0;
+                                        return (
+                                          <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(0,0,0,0.2)", borderRadius: 8, padding: "8px 10px" }}>
+                                            <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700, minWidth: 22 }}>{pi+1}</span>
+                                            <input list="cidades-list" style={{ ...S.inp, flex: 2 }} value={p.localidade || ""} onChange={e => updatePernoite(p.id, "localidade", e.target.value)} placeholder="Cidade do pernoite" />
+                                            <input type="date" style={{ ...S.inp, flex: 1 }} value={p.data || ""} onChange={e => updatePernoite(p.id, "data", e.target.value)} />
+                                            {vDiaria > 0 && <span style={{ fontSize: 11, color: "#fb923c", fontWeight: 700, whiteSpace: "nowrap" }}>{fmtMoney(vDiaria)}</span>}
+                                            <button style={{ ...S.actBtn, color: "#ef4444", padding: 3 }} onClick={() => removePernoite(p.id)}>{I.x}</button>
+                                          </div>
+                                        );
+                                      })}
+                                      {subtotalTransito > 0 && (
+                                        <div style={{ fontSize: 11, color: "#fb923c", fontWeight: 700, textAlign: "right", paddingRight: 4 }}>
+                                          Total trânsito: {fmtMoney(subtotalTransito)}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
                               {/* Detalhamento de diárias da OS */}
                               {diasOS > 0 && (
                                 <div style={{ padding: "10px 14px", background: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.15)", borderRadius: 8,
@@ -3637,8 +3823,9 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                                   <span style={{ fontSize: 11, color: "#94a3b8" }}>Localidade: <strong style={{ color: "#7dd3fc" }}>{colLabel}</strong></span>
                                   <span style={{ fontSize: 11, color: "#94a3b8" }}>Dias: <strong style={{ color: "#f1f5f9" }}>{diasOS}</strong></span>
                                   <span style={{ fontSize: 11, color: "#94a3b8" }}>Valor/dia: <strong style={{ color: "#f1f5f9" }}>{fmtMoney(valorUnit)}</strong></span>
-                                  <span style={{ fontSize: 11, color: "#94a3b8" }}>× {diasOS - 0.5} =</span>
-                                  <span style={{ fontSize: 13, fontWeight: 700, color: "#f59e0b" }}>{fmtMoney(subtotal)}</span>
+                                  <span style={{ fontSize: 11, color: "#94a3b8" }}>× {diasOS - 0.5} = <strong style={{ color: "#f1f5f9" }}>{fmtMoney(subtotalPrincipal)}</strong></span>
+                                  {subtotalTransito > 0 && <span style={{ fontSize: 11, color: "#fb923c" }}>+ trânsito: <strong>{fmtMoney(subtotalTransito)}</strong></span>}
+                                  <span style={{ fontSize: 13, fontWeight: 700, color: "#f59e0b" }}>= {fmtMoney(subtotal)}</span>
                                 </div>
                               )}
                             </div>
@@ -3736,7 +3923,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
         const target  = modDias;
         const cumpr   = calcDiasOS(mil.ordensServico, "Executado");
         const limiar  = (parseFloat(mil.valorAbertura)||0) + (parseFloat(mil.valorFechamento)||0);
-        const diarias = (mil.ordensServico||[]).filter(o=>o.status==="Executado").reduce((a,o)=>{const d=diffDays(o.dataInicio,o.dataFim);return d>0?a+getValorDiaria(mil.postoGrad,o.localidade)*(d-0.5):a;},0);
+        const diarias = (mil.ordensServico||[]).filter(o=>o.status==="Executado").reduce((a,o)=>a+calcSubtotalOS(mil,o),0);
         return (target > 0 && cumpr >= target) || (limiar > 0 && diarias >= limiar);
       };
 
@@ -4279,7 +4466,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                 </div>
                 <div>
                   <div style={{ fontSize:13, fontWeight:800, color:"#f1f5f9", lineHeight:1.2, letterSpacing:"-.01em" }}>Comissionamento</div>
-                  <div style={{ fontSize:10, color:"#64748b", textTransform:"uppercase", letterSpacing:".06em", marginTop:2 }}>1º GDAAE · FAB</div>
+                  <div style={{ fontSize:10, color:"#10b981", textTransform:"uppercase", letterSpacing:".07em", marginTop:2, opacity:0.7 }}>1º GDAAE · FAB</div>
                 </div>
               </div>
             </div>
@@ -4290,7 +4477,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                 { key:"dashboard", label:"Dashboard",  icon:I.chart  },
                 { key:"consulta",  label:"Consulta",   icon:I.search },
               ].map(t => (
-                <button key={t.key} style={{ ...S.sidebarItem, ...(tab===t.key ? S.sidebarItemActive : {}) }} onClick={() => setTab(t.key)}>
+                <button key={t.key} className={`nav-btn${tab===t.key?" nav-active":""}`} style={{ ...S.sidebarItem, ...(tab===t.key ? S.sidebarItemActive : {}) }} onClick={() => setTab(t.key)}>
                   {t.icon}<span>{t.label}</span>
                 </button>
               ))}
@@ -4300,19 +4487,20 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                 { key:"propostas", label:"Propostas", icon:I.doc  },
                 { key:"oficios",   label:"Ofícios",   icon:I.mail },
               ].map(t => (
-                <button key={t.key} style={{ ...S.sidebarItem, ...(tab===t.key ? S.sidebarItemActive : {}) }} onClick={() => setTab(t.key)}>
+                <button key={t.key} className={`nav-btn${tab===t.key?" nav-active":""}`} style={{ ...S.sidebarItem, ...(tab===t.key ? S.sidebarItemActive : {}) }} onClick={() => setTab(t.key)}>
                   {t.icon}<span>{t.label}</span>
                 </button>
               ))}
 
               <div style={{ fontSize:9, color:"#334155", fontWeight:700, textTransform:"uppercase", letterSpacing:".1em", padding:"14px 10px 4px" }}>Documentação</div>
               {[
-                { key:"pag",       label:"PAG",              icon:I.file      },
-                { key:"portaria",  label:"Portaria",         icon:I.stamp     },
-                { key:"numerario", label:"Numerário",        icon:I.coin      },
-                { key:"os",        label:"Ordens de Serviço",icon:I.clipboard },
+                { key:"pag",          label:"PAG",              icon:I.file      },
+                { key:"portaria",     label:"Portaria",         icon:I.stamp     },
+                { key:"numerario",    label:"Numerário",        icon:I.coin      },
+                { key:"os",           label:"Ordens de Serviço",icon:I.clipboard },
+                { key:"encerramento", label:"Encerramento",     icon:I.flag      },
               ].map(t => (
-                <button key={t.key} style={{ ...S.sidebarItem, ...(tab===t.key ? S.sidebarItemActive : {}) }} onClick={() => setTab(t.key)}>
+                <button key={t.key} className={`nav-btn${tab===t.key?" nav-active":""}`} style={{ ...S.sidebarItem, ...(tab===t.key ? S.sidebarItemActive : {}) }} onClick={() => setTab(t.key)}>
                   {t.icon}<span>{t.label}</span>
                 </button>
               ))}
@@ -4337,9 +4525,9 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
             {/* ── Top bar ── */}
             <header className="no-print" style={S.topbar}>
               <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                <div style={{ width:3, height:22, background:"linear-gradient(180deg,#10b981,#059669)", borderRadius:2 }}/>
+                <div style={{ width:3, height:22, background:"linear-gradient(180deg,#34d399,#059669)", borderRadius:2, boxShadow:"0 0 8px rgba(16,185,129,0.5)" }}/>
                 <h1 style={{ margin:0, fontSize:18, fontWeight:700, color:"#f1f5f9", letterSpacing:"-.02em" }}>
-                  {({ dashboard:"Dashboard", consulta:"Consulta de Militares", propostas:"Propostas de Comissionamento", oficios:"Ofícios", pag:"PAG", portaria:"Portaria", numerario:"Numerário", os:"Ordens de Serviço" })[tab]}
+                  {({ dashboard:"Dashboard", consulta:"Consulta de Militares", propostas:"Propostas de Comissionamento", oficios:"Ofícios", pag:"PAG", portaria:"Portaria", numerario:"Numerário", os:"Ordens de Serviço", encerramento:"Encerramento" })[tab]}
                 </h1>
               </div>
               {user && (
@@ -4366,13 +4554,14 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                   {tab === "oficios"    && <OficiosTab oficios={data.oficios || []} setOficios={setOficios} propostas={propostasAtivas} />}
                   {tab === "pag"        && <PagTab propostas={propostasAtivas} setPropostas={setPropostas} />}
                   {tab === "portaria"   && <PortariaTab propostas={propostasAtivas} setPropostas={setPropostas} />}
-                  {tab === "numerario"  && <NumerarioTab propostas={propostasAtivas} setPropostas={setPropostas} />}
-                  {tab === "os"         && <OSTab propostas={propostasAtivas} setPropostas={setPropostas} oficios={data.oficios || []} />}
+                  {tab === "numerario"    && <NumerarioTab propostas={propostasAtivas} setPropostas={setPropostas} />}
+                  {tab === "os"           && <OSTab propostas={propostasAtivas} setPropostas={setPropostas} oficios={data.oficios || []} />}
+                  {tab === "encerramento" && <EncerramentoTab propostas={propostasAtivas} setPropostas={setPropostas} />}
                 </main>
 
-                <footer className="no-print" style={{ borderTop:"1px solid #1a2235", padding:"12px 28px", textAlign:"center" }}>
-                  <span style={{ fontSize:11, color:"#334155", fontWeight:600, letterSpacing:".08em", textTransform:"uppercase" }}>
-                    Desenvolvido por 3S SGS OSCAR
+                <footer className="no-print" style={{ borderTop:"1px solid rgba(255,255,255,0.05)", padding:"12px 28px", textAlign:"center", background:"rgba(0,0,0,0.1)" }}>
+                  <span style={{ fontSize:10.5, color:"#2d3d56", fontWeight:600, letterSpacing:".1em", textTransform:"uppercase" }}>
+                    Desenvolvido por 3S SGS OSCAR · 1º GDAAE
                   </span>
                 </footer>
               </>
@@ -4382,20 +4571,229 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
       );
     }
 
+    /* ═══════════════════════════════════════
+       ENCERRAMENTO TAB
+       ═══════════════════════════════════════ */
+    function EncerramentoTab({ propostas, setPropostas }) {
+      const [saved, setSaved] = useState(false);
+      const [filterPropId, setFilterPropId] = useState("");
+
+      const updateMilEnc = (propostaId, milId, field, value) => {
+        setSaved(false);
+        setPropostas(prev => prev.map(p => p.id !== propostaId ? p : {
+          ...p,
+          militares: p.militares.map(m => m.id === milId ? { ...m, [field]: value } : m)
+        }));
+      };
+
+      const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 2500); };
+
+      // Mostra militares que têm portaria de abertura registrada
+      const propostasComPortaria = propostas.map(p => ({
+        ...p,
+        militares: (p.militares || []).filter(m => m.portaria)
+      })).filter(p => p.militares.length > 0);
+
+      const allMil = propostasComPortaria.flatMap(p => p.militares);
+      const totalApostila = allMil.filter(m => m.portariaApostila).length;
+      const totalBoletimApostila = allMil.filter(m => m.boletimApostila).length;
+      const totalItemFin = allMil.filter(m => m.itemFinanceiro).length;
+
+      return (
+        <div className="no-print">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#f1f5f9" }}>Encerramento de Comissionamento</h2>
+              <p style={{ margin: "4px 0 0", fontSize: 13, color: "#64748b" }}>Portaria apostila, planilha de encerramento e item financeiro</p>
+            </div>
+            <button
+              style={{ ...S.btnPri, background: saved ? "linear-gradient(135deg,#16a34a,#22c55e)" : "linear-gradient(135deg,#1d4ed8,#2563eb)", transition: "all .3s" }}
+              onClick={handleSave}
+            >
+              {saved ? I.check : I.file}
+              <span>{saved ? "Salvo!" : "Salvar"}</span>
+            </button>
+          </div>
+
+          {propostasComPortaria.length > 1 && (
+            <div style={{ marginBottom: 16 }}>
+              <select style={{ ...S.inp, maxWidth: 320 }} value={filterPropId} onChange={e => setFilterPropId(e.target.value)}>
+                <option value="">— Todas as Propostas —</option>
+                {propostasComPortaria.map(p => <option key={p.id} value={p.id}>{p.titulo || "Sem título"}</option>)}
+              </select>
+            </div>
+          )}
+
+          <div style={{ ...S.statsGrid, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", marginBottom: 22 }}>
+            {[
+              { label: "Militares Elegíveis", value: allMil.length, color: "#6366f1" },
+              { label: "Port. Apostila", value: totalApostila, color: "#a78bfa" },
+              { label: "Publicado em Bol", value: totalBoletimApostila, color: "#22c55e" },
+              { label: "Item Financeiro", value: totalItemFin, color: "#f59e0b" },
+            ].map((c, i) => (
+              <div key={i} style={S.statCard}>
+                <div style={{ ...S.statIcon, background: c.color + "18", color: c.color }}>{I.flag}</div>
+                <div><div style={S.statVal}>{c.value}</div><div style={S.statLbl}>{c.label}</div></div>
+              </div>
+            ))}
+          </div>
+
+          {allMil.length === 0 ? (
+            <div style={{ ...S.card, ...S.empty }}>
+              <div style={{ color: "#334155", display: "flex", justifyContent: "center", marginBottom: 12 }}>{I.flag}</div>
+              <p style={{ fontSize: 15, fontWeight: 600, color: "#94a3b8", margin: "0 0 6px" }}>Nenhum militar elegível para encerramento</p>
+              <p style={{ fontSize: 13, color: "#475569", margin: 0 }}>Militares aparecerão aqui após terem a portaria de abertura registrada.</p>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 16 }}>
+              {propostasComPortaria.filter(p => !filterPropId || p.id === filterPropId).map(prop => {
+                const apostOk = prop.militares.filter(m => m.portariaApostila).length;
+                const finOk   = prop.militares.filter(m => m.itemFinanceiro).length;
+                return (
+                  <div key={prop.id} style={S.card}>
+                    <div style={{ padding: "14px 22px", borderBottom: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(99,102,241,0.04)" }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "#818cf8" }}>{prop.titulo || "Proposta sem título"}</span>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: "#a78bfa", background: "rgba(167,139,250,0.12)", padding: "3px 8px", borderRadius: 4 }}>Apostila: {apostOk}/{prop.militares.length}</span>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: "#f59e0b", background: "rgba(245,158,11,0.12)", padding: "3px 8px", borderRadius: 4 }}>Fin: {finOk}/{prop.militares.length}</span>
+                      </div>
+                    </div>
+                    <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
+                      {prop.militares.map(mil => {
+                        const encOk = !!mil.portariaApostila;
+                        const bolOk = !!mil.boletimApostila;
+                        const finOk = !!mil.itemFinanceiro;
+                        const etapa = finOk ? "Concluído" : bolOk ? "Aguardando Item Fin." : encOk ? "Aguardando Publicação" : "Pendente";
+                        const etapaCor = finOk ? "#22c55e" : bolOk ? "#3b82f6" : encOk ? "#a78bfa" : "#f59e0b";
+
+                        // Detecção de promoção e recálculo da ajuda de custo de encerramento
+                        const promocoes = mil.promocoes || [];
+                        const ultimaPromocao = promocoes.length > 0
+                          ? [...promocoes].filter(p => p.dataPromocao && p.postoNovo).sort((a,b) => a.dataPromocao.localeCompare(b.dataPromocao)).pop()
+                          : null;
+                        const postoEncerramento = ultimaPromocao ? ultimaPromocao.postoNovo : mil.postoGrad;
+                        const houvePomocao = !!ultimaPromocao && postoEncerramento !== mil.postoGrad;
+                        const diasMin = parseInt(mil.diasMinimos) || 0;
+                        const fechamentoOriginal = parseFloat(mil.valorFechamento) || 0;
+                        const novoFechamentoCalc = houvePomocao && diasMin > 0
+                          ? calcAjudaCustoCompleto(postoEncerramento, mil.habilitacao || "", mil.temDependente, diasMin).volta
+                          : null;
+                        const diffFechamento = novoFechamentoCalc ? novoFechamentoCalc - fechamentoOriginal : 0;
+
+                        return (
+                          <div key={mil.id} style={{ background: "#0c111b", border: `1px solid ${finOk ? "rgba(34,197,94,0.25)" : encOk ? "rgba(167,139,250,0.25)" : "#1e293b"}`, borderRadius: 12, padding: "14px 16px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                              <InsigniaFAB postoGrad={postoEncerramento} size={34} />
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 600, color: "#f1f5f9", fontSize: 13 }}>
+                                  {houvePomocao
+                                    ? <span>{mil.postoGrad} <span style={{ color: "#a78bfa" }}>→ {postoEncerramento}</span> {mil.nomeGuerra}</span>
+                                    : <span>{mil.postoGrad} {mil.nomeGuerra}</span>}
+                                </div>
+                                <div style={{ fontSize: 11, color: "#64748b" }}>{mil.nomeCompleto}</div>
+                              </div>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: etapaCor, background: etapaCor + "18", padding: "3px 10px", borderRadius: 5 }}>{etapa}</span>
+                            </div>
+
+                            {/* Alerta de promoção + impacto na ajuda de custo */}
+                            {houvePomocao && novoFechamentoCalc && (
+                              <div style={{ marginBottom: 12, padding: "10px 14px", background: "rgba(167,139,250,0.08)", border: "1px solid rgba(167,139,250,0.3)", borderRadius: 8 }}>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: "#a78bfa", marginBottom: 6 }}>⬆ Promoção detectada: {mil.postoGrad} → {postoEncerramento}</div>
+                                <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
+                                  <div>
+                                    <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", fontWeight: 600 }}>Fechamento original</div>
+                                    <div style={{ fontSize: 14, fontWeight: 700, color: "#94a3b8" }}>{fmtMoney(fechamentoOriginal)}</div>
+                                  </div>
+                                  <span style={{ color: "#475569", fontSize: 16 }}>→</span>
+                                  <div>
+                                    <div style={{ fontSize: 10, color: "#22c55e", textTransform: "uppercase", fontWeight: 600 }}>Novo valor calculado ({postoEncerramento})</div>
+                                    <div style={{ fontSize: 14, fontWeight: 700, color: "#22c55e" }}>{fmtMoney(novoFechamentoCalc)}</div>
+                                  </div>
+                                  <div style={{ padding: "4px 10px", background: "rgba(245,158,11,0.12)", borderRadius: 6 }}>
+                                    <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", fontWeight: 600 }}>Diferença</div>
+                                    <div style={{ fontSize: 13, fontWeight: 700, color: "#f59e0b" }}>+{fmtMoney(diffFechamento)}</div>
+                                  </div>
+                                  {!mil.valorEncerramentoReal && (
+                                    <button style={{ ...S.btnPri, padding: "5px 12px", fontSize: 11 }}
+                                      onClick={() => updateMilEnc(prop.id, mil.id, "valorEncerramentoReal", String(novoFechamentoCalc.toFixed(2)))}>
+                                      Usar este valor
+                                    </button>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>
+                                  Nova proposta de encerramento necessária com o valor atualizado.
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Portaria Apostila */}
+                            <FG label="Portaria Apostila">
+                              <input style={S.inp} value={mil.portariaApostila || ""}
+                                onChange={e => updateMilEnc(prop.id, mil.id, "portariaApostila", e.target.value)}
+                                placeholder="PORTARIA BACO Nº XX/1GDAAE_CGEP, DE XX DE JANEIRO DE 20XX (Apostila)" />
+                            </FG>
+
+                            {encOk && (
+                              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
+                                <div style={S.row}>
+                                  <FG label="Boletim de Publicação (Apostila)" flex>
+                                    <input style={S.inp} value={mil.boletimApostila || ""}
+                                      onChange={e => updateMilEnc(prop.id, mil.id, "boletimApostila", e.target.value)}
+                                      placeholder="Bol Int Ost Nº XX, de XX MAR 2026" />
+                                  </FG>
+                                  <FG label={houvePomocao ? `Valor de Encerramento (${postoEncerramento})` : "Novo Valor de Encerramento (se reajuste)"} flex>
+                                    <input style={{ ...S.inp, borderColor: houvePomocao && mil.valorEncerramentoReal ? "rgba(34,197,94,0.4)" : undefined }}
+                                      type="number" step="0.01" value={mil.valorEncerramentoReal || ""}
+                                      onChange={e => updateMilEnc(prop.id, mil.id, "valorEncerramentoReal", e.target.value)}
+                                      placeholder={novoFechamentoCalc ? `Sugerido: ${novoFechamentoCalc.toFixed(2)}` : "Ex: 9011.57 (deixe em branco se não houve reajuste)"} />
+                                  </FG>
+                                </div>
+                                <div style={S.row}>
+                                  <FG label="Nº Item Financeiro" flex>
+                                    <input style={S.inp} value={mil.itemFinanceiro || ""}
+                                      onChange={e => updateMilEnc(prop.id, mil.id, "itemFinanceiro", e.target.value)}
+                                      placeholder="Nº do item financeiro para pagamento" />
+                                  </FG>
+                                  <FG label="Nova Proposta de Encerramento (ref.)" flex>
+                                    <input style={S.inp} value={mil.novaPropostaEncerramento || ""}
+                                      onChange={e => updateMilEnc(prop.id, mil.id, "novaPropostaEncerramento", e.target.value)}
+                                      placeholder="Ex: Proposta Nº 02/1GDAAE/2026" />
+                                  </FG>
+                                </div>
+                                <FG label="Observações do Encerramento">
+                                  <textarea style={{ ...S.inp, minHeight: 60, resize: "vertical" }} value={mil.observacoesEncerramento || ""}
+                                    onChange={e => updateMilEnc(prop.id, mil.id, "observacoesEncerramento", e.target.value)}
+                                    placeholder="Ex: Soldo reajustado em 01/07/2025. Nova planilha comparativa elaborada." />
+                                </FG>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     /* ─── Styles ─── */
     const S = {
-      root: { fontFamily: "'DM Sans','Segoe UI',system-ui,sans-serif", background: "#0f1117", minHeight: "100vh", color: "#e2e8f0", display:"flex", flexDirection:"row" },
+      root: { fontFamily: "'DM Sans','Segoe UI',system-ui,sans-serif", background: "#0a0e1a", minHeight: "100vh", color: "#e2e8f0", display:"flex", flexDirection:"row" },
 
       // ── Sidebar ──
-      sidebar: { width: 220, background: "#141824", borderRight: "1px solid #1a2235", display: "flex", flexDirection: "column", position: "fixed", top: 0, bottom: 0, left: 0, zIndex: 50, overflowY: "auto" },
-      sidebarLogo: { padding: "18px 14px 16px", borderBottom: "1px solid #1a2235", flexShrink: 0 },
+      sidebar: { width: 220, background: "linear-gradient(180deg,#111827 0%,#0d1421 100%)", borderRight: "1px solid rgba(255,255,255,0.06)", display: "flex", flexDirection: "column", position: "fixed", top: 0, bottom: 0, left: 0, zIndex: 50, overflowY: "auto" },
+      sidebarLogo: { padding: "20px 16px 18px", borderBottom: "1px solid rgba(255,255,255,0.05)", flexShrink: 0 },
       sidebarNav: { flex: 1, padding: "6px 8px", overflowY: "auto" },
-      sidebarItem: { display: "flex", alignItems: "center", gap: 9, padding: "9px 12px", borderRadius: 10, border: "none", background: "transparent", color: "#64748b", fontSize: 13, fontWeight: 500, cursor: "pointer", width: "100%", textAlign: "left", transition: "all .18s", whiteSpace: "nowrap", marginBottom: 1 },
-      sidebarItemActive: { background: "rgba(16,185,129,0.12)", color: "#10b981", fontWeight: 700 },
-      sidebarFooter: { padding: "8px", borderTop: "1px solid #1a2235", flexShrink: 0 },
+      sidebarItem: { display: "flex", alignItems: "center", gap: 9, padding: "9px 10px 9px 10px", borderRadius: 10, border: "none", background: "transparent", color: "#64748b", fontSize: 13, fontWeight: 500, cursor: "pointer", width: "100%", textAlign: "left", transition: "all .15s", whiteSpace: "nowrap", marginBottom: 1 },
+      sidebarItemActive: { background: "rgba(16,185,129,0.1)", color: "#10b981", fontWeight: 700 },
+      sidebarFooter: { padding: "10px", borderTop: "1px solid rgba(255,255,255,0.05)", flexShrink: 0 },
 
       // ── Topbar ──
-      topbar: { background: "#141824", borderBottom: "1px solid #1a2235", padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, position: "sticky", top: 0, zIndex: 40, backdropFilter: "blur(12px)" },
+      topbar: { background: "rgba(13,20,33,0.85)", borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "0 28px", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, position: "sticky", top: 0, zIndex: 40, backdropFilter: "blur(20px) saturate(1.5)" },
 
       // ── Legacy compat ──
       header: { background: "#141824", borderBottom: "1px solid #1a2235", padding: "0 24px", position: "sticky", top: 0, zIndex: 40 },
@@ -4404,47 +4802,47 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
       tab: { display: "flex", alignItems: "center", gap: 7, padding: "8px 16px", borderRadius: 10, background: "transparent", border: "none", color: "#64748b", fontSize: 13, fontWeight: 500, cursor: "pointer", transition: "all .2s", whiteSpace: "nowrap" },
       tabActive: { background: "#1a2235", color: "#f1f5f9", fontWeight: 600 },
 
-      logo: { width: 44, height: 44, borderRadius: 10, background: "linear-gradient(135deg,#059669,#10b981)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", boxShadow: "0 0 20px rgba(16,185,129,0.3)" },
+      logo: { width: 44, height: 44, borderRadius: 12, background: "linear-gradient(145deg,#047857,#10b981)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", boxShadow: "0 0 0 1px rgba(16,185,129,0.3), 0 0 24px rgba(16,185,129,0.25)" },
       main: { padding: "24px 28px 48px" },
 
       statsGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 14, marginBottom: 22 },
-      statCard: { background: "#1a2235", border: "1px solid #242d45", borderRadius: 14, padding: "18px 20px", display: "flex", alignItems: "center", gap: 14 },
-      statIcon: { width: 42, height: 42, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+      statCard: { background: "linear-gradient(145deg,#141e2e,#1a2438)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 14, padding: "18px 20px", display: "flex", alignItems: "center", gap: 14, boxShadow: "0 4px 16px rgba(0,0,0,0.25)" },
+      statIcon: { width: 44, height: 44, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
       statVal: { fontSize: 24, fontWeight: 800, color: "#f8fafc", lineHeight: 1, letterSpacing: "-.03em" },
       statLbl: { fontSize: 11, color: "#64748b", marginTop: 3, fontWeight: 500 },
 
-      card: { background: "#1a2235", border: "1px solid #242d45", borderRadius: 16, overflow: "hidden" },
-      toolbar: { padding: "16px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", borderBottom: "1px solid #242d45" },
+      card: { background: "linear-gradient(145deg,#141e2e,#192336)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 16, overflow: "hidden", boxShadow: "0 4px 24px rgba(0,0,0,0.25)" },
+      toolbar: { padding: "14px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", borderBottom: "1px solid rgba(255,255,255,0.06)" },
       searchWrap: { position: "relative", flex: "1 1 260px", minWidth: 180 },
       searchIco: { position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#475569", display: "flex" },
-      searchIn: { width: "100%", boxSizing: "border-box", padding: "9px 14px 9px 36px", background: "#0f1117", border: "1px solid #242d45", borderRadius: 10, color: "#e2e8f0", fontSize: 13, outline: "none" },
+      searchIn: { width: "100%", boxSizing: "border-box", padding: "9px 14px 9px 36px", background: "rgba(10,14,26,0.8)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, color: "#e2e8f0", fontSize: 13, outline: "none", transition: "border-color .2s, box-shadow .2s" },
       filterGrp: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" },
-      sel: { padding: "9px 12px", background: "#0f1117", border: "1px solid #242d45", borderRadius: 10, color: "#e2e8f0", fontSize: 13, outline: "none", cursor: "pointer" },
+      sel: { padding: "9px 12px", background: "rgba(10,14,26,0.8)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, color: "#e2e8f0", fontSize: 13, outline: "none", cursor: "pointer" },
       table: { width: "100%", borderCollapse: "collapse" },
-      th: { padding: "11px 16px", fontSize: 10, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: ".06em", textAlign: "left", borderBottom: "1px solid #242d45", whiteSpace: "nowrap" },
-      tr: { borderBottom: "1px solid rgba(36,45,69,0.5)", cursor: "default", transition: "background .15s" },
+      th: { padding: "11px 16px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: ".08em", textAlign: "left", borderBottom: "1px solid rgba(255,255,255,0.06)", whiteSpace: "nowrap", background: "rgba(0,0,0,0.1)" },
+      tr: { borderBottom: "1px solid rgba(255,255,255,0.04)", cursor: "default", transition: "background .12s" },
       td: { padding: "12px 16px", fontSize: 13, verticalAlign: "middle" },
-      avatar: { width: 34, height: 34, borderRadius: 8, background: "linear-gradient(135deg,#1e3a5f,#1e40af)", color: "#93c5fd", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flexShrink: 0 },
-      mono: { fontFamily: "'JetBrains Mono','Fira Code',monospace", fontSize: 12, color: "#94a3b8", background: "rgba(36,45,69,0.6)", padding: "3px 7px", borderRadius: 5 },
-      dTag: { display: "inline-block", padding: "3px 9px", borderRadius: 5, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" },
-      badge: { display: "inline-block", padding: "3px 9px", borderRadius: 5, fontSize: 12, fontWeight: 600 },
-      tfoot: { padding: "11px 20px", fontSize: 12, color: "#475569", borderTop: "1px solid #242d45" },
+      avatar: { width: 34, height: 34, borderRadius: 9, background: "linear-gradient(145deg,#1e3a5f,#1e40af)", color: "#93c5fd", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flexShrink: 0, boxShadow: "0 2px 8px rgba(30,64,175,0.3)" },
+      mono: { fontFamily: "'JetBrains Mono','Fira Code',monospace", fontSize: 12, color: "#94a3b8", background: "rgba(255,255,255,0.05)", padding: "3px 7px", borderRadius: 5 },
+      dTag: { display: "inline-block", padding: "3px 9px", borderRadius: 6, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" },
+      badge: { display: "inline-block", padding: "3px 9px", borderRadius: 6, fontSize: 12, fontWeight: 600 },
+      tfoot: { padding: "11px 20px", fontSize: 12, color: "#475569", borderTop: "1px solid rgba(255,255,255,0.06)" },
       empty: { padding: "56px 24px", textAlign: "center" },
       actBtn: { background: "transparent", border: "1px solid transparent", borderRadius: 8, padding: 6, cursor: "pointer", color: "#64748b", display: "flex", alignItems: "center", transition: "all .15s" },
 
-      btnPri: { display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 18px", background: "linear-gradient(135deg,#059669,#10b981)", border: "none", borderRadius: 10, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", boxShadow: "0 2px 12px rgba(16,185,129,0.3)", whiteSpace: "nowrap" },
-      btnSec: { padding: "9px 18px", background: "transparent", border: "1px solid #334155", borderRadius: 10, color: "#94a3b8", fontSize: 13, fontWeight: 500, cursor: "pointer" },
+      btnPri: { display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 18px", background: "linear-gradient(135deg,#047857,#10b981)", border: "none", borderRadius: 10, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", boxShadow: "0 2px 14px rgba(16,185,129,0.3)", whiteSpace: "nowrap", transition: "all .2s" },
+      btnSec: { padding: "9px 18px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, color: "#94a3b8", fontSize: 13, fontWeight: 500, cursor: "pointer", transition: "all .18s" },
       btnGhost: { background: "transparent", border: "none", color: "#10b981", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, padding: 0 },
 
-      overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 },
-      modal: { background: "#1a2235", border: "1px solid #242d45", borderRadius: 18, width: "100%", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 24px 80px rgba(0,0,0,0.5)" },
-      modalHead: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 28px 14px", borderBottom: "1px solid #242d45" },
+      overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 },
+      modal: { background: "linear-gradient(160deg,#141e2e,#182030)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 20, width: "100%", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 0 0 1px rgba(255,255,255,0.04) inset, 0 32px 90px rgba(0,0,0,0.6), 0 0 60px rgba(16,185,129,0.04)" },
+      modalHead: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 28px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)" },
       modalTitle: { fontSize: 16, fontWeight: 700, color: "#f1f5f9", margin: 0 },
-      iconBtn: { background: "transparent", border: "none", color: "#64748b", cursor: "pointer", padding: 4, display: "flex" },
+      iconBtn: { background: "transparent", border: "none", color: "#64748b", cursor: "pointer", padding: 4, display: "flex", borderRadius: 7, transition: "all .15s" },
 
       row: { display: "flex", gap: 12 },
-      lbl: { fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: ".04em" },
-      inp: { width: "100%", boxSizing: "border-box", padding: "9px 12px", background: "#0f1117", border: "1px solid #242d45", borderRadius: 10, color: "#e2e8f0", fontSize: 13, outline: "none", fontFamily: "inherit", transition: "border-color .2s" },
+      lbl: { fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: ".05em" },
+      inp: { width: "100%", boxSizing: "border-box", padding: "9px 12px", background: "rgba(10,14,26,0.8)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, color: "#e2e8f0", fontSize: 13, outline: "none", fontFamily: "inherit", transition: "border-color .2s, box-shadow .2s" },
       fActions: { display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22 },
     };
 
