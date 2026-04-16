@@ -422,6 +422,37 @@
         });
     }
 
+    // ─── Pipeline de etapas do comissionamento ───
+    const ETAPAS_CFG = {
+      enviar_oficio:          { label:"Enviar Ofício",             prox:"Criar ofício de solicitação (SIGAD)",       cor:"#64748b", n:1  },
+      aguardando_autorizacao: { label:"Aguardando Autorização",    prox:"Aguardar autorização do COMPREP",           cor:"#f59e0b", n:2  },
+      abrir_pag:              { label:"Abrir PAG",                 prox:"Registrar PAG e nº subprocesso",            cor:"#fb923c", n:3  },
+      registrar_portaria:     { label:"Registrar Portaria",        prox:"Confeccionar portaria de abertura",         cor:"#a78bfa", n:4  },
+      publicar_boletim:       { label:"Publicar em Boletim",       prox:"Publicar portaria no boletim interno",      cor:"#818cf8", n:5  },
+      numerario_abertura:     { label:"Numerário de Abertura",     prox:"Conceder numerário — ajuda de custo (ida)", cor:"#3b82f6", n:6  },
+      iniciar_os:             { label:"Iniciar OS",                prox:"Emitir primeira Ordem de Serviço",          cor:"#22d3ee", n:7  },
+      os_andamento:           { label:"OS em Andamento",           prox:"Acompanhar execução das OS",                cor:"#22c55e", n:8  },
+      encerramento:           { label:"Encerrar Comissionamento",  prox:"Confeccionar portaria apostila",            cor:"#f97316", n:9  },
+      apostila_boletim:       { label:"Publicar Apostila",         prox:"Publicar portaria apostila no boletim",     cor:"#a78bfa", n:10 },
+      numerario_fechamento:   { label:"Numerário de Fechamento",   prox:"Conceder numerário — ajuda de custo (volta)",cor:"#3b82f6", n:11 },
+      concluido:              { label:"Concluído",                 prox:"Comissionamento encerrado",                 cor:"#10b981", n:12 },
+    };
+
+    function getEtapaMilitar(mil, oficio, isFechado) {
+      if (mil.itemFinanceiro)                              return "concluido";
+      if (mil.boletimApostila)                             return "numerario_fechamento";
+      if (mil.portariaApostila)                            return "apostila_boletim";
+      if (isFechado)                                       return "encerramento";
+      if ((mil.ordensServico || []).length > 0)            return "os_andamento";
+      if (mil.numBoletim || mil.numStatus === "concedido") return "iniciar_os";
+      if (mil.boletim)                                     return "numerario_abertura";
+      if (mil.portaria)                                    return "publicar_boletim";
+      if (mil.numeroPag)                                   return "registrar_portaria";
+      if (oficio?.status === "autorizado")                 return "abrir_pag";
+      if (oficio)                                          return "aguardando_autorizacao";
+      return "enviar_oficio";
+    }
+
     // ─── Retorna o posto/grad do militar em uma data específica (considera promoções) ───
     function getMilPostoNaData(mil, dataStr) {
       const promocoes = mil.promocoes;
@@ -1016,6 +1047,79 @@
       );
     }
 
+    function PainelPendencias({ propostas, oficios }) {
+      const items = React.useMemo(() => {
+        return propostas.flatMap(p => {
+          const oficio = (oficios || []).find(o => o.propostaId === p.id);
+          return (p.militares || []).map(m => {
+            const modDias = (m.modulos || []).reduce((s, mod) => s + diffDays(mod.dataInicio, mod.dataFim), 0);
+            const cumpDias = calcDiasOS(m.ordensServico, "Executado");
+            const valAbertura = parseFloat(m.valorAbertura) || 0;
+            const valFechamento = parseFloat(m.valorFechamento) || 0;
+            const totalDiariasExec = (m.ordensServico || [])
+              .filter(os => os.status === "Executado")
+              .reduce((acc, os) => acc + calcSubtotalOS(m, os), 0);
+            const limiar = valAbertura + valFechamento;
+            const atingiuEco = limiar > 0 && totalDiariasExec >= limiar;
+            const isFechado = (modDias > 0 && cumpDias >= modDias) || atingiuEco;
+            const etapa = getEtapaMilitar(m, oficio, isFechado);
+            const cfg = ETAPAS_CFG[etapa];
+            return {
+              nome: `${m.postoGrad} ${m.nomeGuerra}`,
+              propTitulo: p.titulo || "Sem título",
+              etapa, cfg,
+            };
+          });
+        }).filter(x => x.etapa !== "concluido");
+      }, [propostas, oficios]);
+
+      const grouped = React.useMemo(() => {
+        const map = {};
+        items.forEach(item => {
+          if (!map[item.etapa]) map[item.etapa] = [];
+          map[item.etapa].push(item);
+        });
+        return Object.entries(map).sort((a, b) => (ETAPAS_CFG[a[0]]?.n||0) - (ETAPAS_CFG[b[0]]?.n||0));
+      }, [items]);
+
+      if (items.length === 0) {
+        return (
+          <div style={{textAlign:"center",padding:"24px 0",color:"#475569",fontSize:13}}>
+            <div style={{fontSize:24,marginBottom:8}}>✅</div>
+            Nenhuma ação pendente — todos os comissionamentos estão concluídos.
+          </div>
+        );
+      }
+
+      return (
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {grouped.map(([etapa, mils]) => {
+            const cfg = ETAPAS_CFG[etapa];
+            return (
+              <div key={etapa} style={{border:`1px solid ${cfg.cor}44`,borderRadius:10,overflow:"hidden"}}>
+                <div style={{background:`${cfg.cor}15`,padding:"9px 16px",display:"flex",alignItems:"center",gap:10}}>
+                  <div style={{width:22,height:22,borderRadius:"50%",background:cfg.cor,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:"#fff",flexShrink:0}}>{cfg.n}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <span style={{fontSize:12,fontWeight:700,color:cfg.cor}}>{cfg.label}</span>
+                    <span style={{fontSize:11,color:"#64748b",marginLeft:8}}>→ {cfg.prox}</span>
+                  </div>
+                  <div style={{fontSize:11,background:`${cfg.cor}25`,color:cfg.cor,padding:"2px 10px",borderRadius:12,fontWeight:700,flexShrink:0}}>{mils.length}</div>
+                </div>
+                <div style={{padding:"8px 14px 10px",display:"flex",flexWrap:"wrap",gap:6}}>
+                  {mils.map((mil, i) => (
+                    <div key={i} style={{fontSize:11,color:"#cbd5e1",background:"#0f1117",border:"1px solid #242d45",borderRadius:6,padding:"3px 10px",whiteSpace:"nowrap"}}>
+                      {mil.nome}
+                      <span style={{color:"#475569",marginLeft:5,fontSize:10}}>({mil.propTitulo})</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
     function DashboardTab({ propostas, oficios }) {
       const [selectedMilId, setSelectedMilId] = useState("");
       const [selectedPropId, setSelectedPropId] = useState("");
@@ -1261,6 +1365,20 @@
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+
+          {/* ── Painel de Pendências ── */}
+          <div className="dash-card" style={{...S.card,marginTop:20,animationDelay:".64s"}}>
+            <div style={{padding:"16px 22px",borderBottom:"1px solid #242d45",display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:32,height:32,borderRadius:9,background:"rgba(249,115,22,0.12)",color:"#f97316",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0}}>📋</div>
+              <div>
+                <h3 style={{margin:0,fontSize:13,fontWeight:700,color:"#f1f5f9"}}>Próximas Ações — Pipeline</h3>
+                <p style={{margin:"2px 0 0",fontSize:11,color:"#475569"}}>Ações pendentes por militar, em sequência do processo de comissionamento</p>
+              </div>
+            </div>
+            <div style={{padding:"20px 22px"}}>
+              <PainelPendencias propostas={propostas} oficios={oficios} />
             </div>
           </div>
 
@@ -4556,7 +4674,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                   {tab === "portaria"   && <PortariaTab propostas={propostasAtivas} setPropostas={setPropostas} />}
                   {tab === "numerario"    && <NumerarioTab propostas={propostasAtivas} setPropostas={setPropostas} />}
                   {tab === "os"           && <OSTab propostas={propostasAtivas} setPropostas={setPropostas} oficios={data.oficios || []} />}
-                  {tab === "encerramento" && <EncerramentoTab propostas={propostasAtivas} setPropostas={setPropostas} />}
+                  {tab === "encerramento" && <EncerramentoTab propostas={propostasAtivas} setPropostas={setPropostas} oficios={oficios} />}
                 </main>
 
                 <footer className="no-print" style={{ borderTop:"1px solid rgba(255,255,255,0.05)", padding:"12px 28px", textAlign:"center", background:"rgba(0,0,0,0.1)" }}>
@@ -4574,7 +4692,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
     /* ═══════════════════════════════════════
        ENCERRAMENTO TAB
        ═══════════════════════════════════════ */
-    function EncerramentoTab({ propostas, setPropostas }) {
+    function EncerramentoTab({ propostas, setPropostas, oficios }) {
       const [saved, setSaved] = useState(false);
       const [filterPropId, setFilterPropId] = useState("");
 
@@ -4588,10 +4706,21 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
 
       const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 2500); };
 
-      // Mostra militares que têm portaria de abertura registrada
+      // Mostra militares com OS concluída (dias cumpridos ou economicidade atingida)
       const propostasComPortaria = propostas.map(p => ({
         ...p,
-        militares: (p.militares || []).filter(m => m.portaria)
+        militares: (p.militares || []).filter(m => {
+          const modDias = (m.modulos || []).reduce((s, mod) => s + diffDays(mod.dataInicio, mod.dataFim), 0);
+          const cumpDias = calcDiasOS(m.ordensServico, "Executado");
+          const valAb = parseFloat(m.valorAbertura) || 0;
+          const valFe = parseFloat(m.valorFechamento) || 0;
+          const totalDiariasExec = (m.ordensServico || [])
+            .filter(os => os.status === "Executado")
+            .reduce((acc, os) => acc + calcSubtotalOS(m, os), 0);
+          const limiar = valAb + valFe;
+          const atingiuEco = limiar > 0 && totalDiariasExec >= limiar;
+          return (modDias > 0 && cumpDias >= modDias) || atingiuEco;
+        })
       })).filter(p => p.militares.length > 0);
 
       const allMil = propostasComPortaria.flatMap(p => p.militares);
@@ -4642,7 +4771,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
             <div style={{ ...S.card, ...S.empty }}>
               <div style={{ color: "#334155", display: "flex", justifyContent: "center", marginBottom: 12 }}>{I.flag}</div>
               <p style={{ fontSize: 15, fontWeight: 600, color: "#94a3b8", margin: "0 0 6px" }}>Nenhum militar elegível para encerramento</p>
-              <p style={{ fontSize: 13, color: "#475569", margin: 0 }}>Militares aparecerão aqui após terem a portaria de abertura registrada.</p>
+              <p style={{ fontSize: 13, color: "#475569", margin: 0 }}>Militares aparecerão aqui após concluírem todas as Ordens de Serviço previstas.</p>
             </div>
           ) : (
             <div style={{ display: "grid", gap: 16 }}>
