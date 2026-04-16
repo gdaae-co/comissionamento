@@ -471,8 +471,13 @@
       if (d <= 0) return 0;
       const posto = getMilPostoNaData(mil, os.dataInicio);
       let total = getValorDiaria(posto, os.localidade) * (d - 0.5);
-      if (os.tipoDeslocamento === "Terrestre" && os.pernoitesTransito && os.pernoitesTransito.length > 0) {
-        total += os.pernoitesTransito.reduce((acc, p) => acc + (p.localidade ? getValorDiaria(posto, p.localidade) : 0), 0);
+      if (os.pernoitesTransito && os.pernoitesTransito.length > 0) {
+        total += os.pernoitesTransito.reduce((acc, p) => {
+          if (!p.localidade) return acc;
+          const dp = diffDays(p.dataInicio, p.dataFim);
+          const diasPernoite = dp > 0 ? dp - 0.5 : 1; // período com chegada descontada; legado sem período = 1 diária
+          return acc + getValorDiaria(posto, p.localidade) * diasPernoite;
+        }, 0);
       }
       return total;
     }
@@ -3552,7 +3557,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
        ORDENS DE SERVIÇO TAB
        ═══════════════════════════════════════ */
     function emptyOS() {
-      return { id: uid(), numero: "", missaoCurso: "", localidade: "", dataInicio: "", dataFim: "", status: "Planejado", tipoDeslocamento: "Aereo", pernoitesTransito: [] };
+      return { id: uid(), numero: "", missaoCurso: "", localidade: "", dataInicio: "", dataFim: "", status: "Planejado", pernoitesTransito: [] };
     }
 
     function OSTab({ propostas, setPropostas, oficios }) {
@@ -3811,14 +3816,18 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                         const valorUnit  = diasOS > 0 ? getValorDiaria(postoNaData, os.localidade) : 0;
                         const subtotalPrincipal = diasOS > 0 ? valorUnit * (diasOS - 0.5) : 0;
                         const pernoites  = os.pernoitesTransito || [];
-                        const subtotalTransito = pernoites.reduce((a, p) => a + (p.localidade ? getValorDiaria(postoNaData, p.localidade) : 0), 0);
+                        const subtotalTransito = pernoites.reduce((a, p) => {
+                          if (!p.localidade) return a;
+                          const dp = diffDays(p.dataInicio, p.dataFim);
+                          const diasP = dp > 0 ? dp - 0.5 : 1;
+                          return a + getValorDiaria(postoNaData, p.localidade) * diasP;
+                        }, 0);
                         const subtotal   = subtotalPrincipal + subtotalTransito;
                         const grupo      = getGrupoDiaria(postoNaData);
                         const col        = getColunaDiaria(os.localidade);
                         const colLabel   = col === 0 ? "BSB/MAO/RJ/SP" : col === 1 ? "Capital" : "Demais";
                         const isExec     = os.status === "Executado";
-                        const isTerr     = os.tipoDeslocamento === "Terrestre";
-                        const addPernoite = () => updateOS(selMil._propId, selMil.id, os.id, "pernoitesTransito", [...pernoites, { id: uid(), localidade: "", data: "" }]);
+                        const addPernoite = () => updateOS(selMil._propId, selMil.id, os.id, "pernoitesTransito", [...pernoites, { id: uid(), localidade: "", dataInicio: "", dataFim: "" }]);
                         const removePernoite = (pid) => updateOS(selMil._propId, selMil.id, os.id, "pernoitesTransito", pernoites.filter(p => p.id !== pid));
                         const updatePernoite = (pid, field, val) => updateOS(selMil._propId, selMil.id, os.id, "pernoitesTransito", pernoites.map(p => p.id === pid ? { ...p, [field]: val } : p));
                         return (
@@ -3834,7 +3843,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                                   background: isExec ? "rgba(34,197,94,0.12)" : "rgba(167,139,250,0.12)" }}>
                                   {isExec ? "✔ Executado" : "◷ Planejado"}
                                 </span>
-                                {isTerr && <span style={{ fontSize: 10, fontWeight: 700, color: "#fb923c", background: "rgba(251,146,60,0.12)", padding: "2px 7px", borderRadius: 4 }}>🚗 Terrestre</span>}
+                                {pernoites.length > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: "#38bdf8", background: "rgba(56,189,248,0.12)", padding: "2px 7px", borderRadius: 4 }}>🌙 {pernoites.length} pernoite{pernoites.length>1?"s":""} em trânsito</span>}
                                 {postoNaData !== selMil.postoGrad && <span style={{ fontSize: 10, fontWeight: 700, color: "#a78bfa", background: "rgba(167,139,250,0.12)", padding: "2px 7px", borderRadius: 4 }}>Posto na data: {postoNaData}</span>}
                                 {diasOS > 0 && (
                                   <span style={{ fontSize: 11, fontWeight: 700, color: "#f59e0b" }}>
@@ -3885,52 +3894,48 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                                 </FG>
                               </div>
 
-                              {/* Tipo de Deslocamento */}
-                              <FG label="Tipo de Deslocamento">
-                                <div style={{ display: "flex", gap: 10 }}>
-                                  {[["Aereo","✈ Aéreo"],["Terrestre","🚗 Terrestre"]].map(([val, lbl]) => (
-                                    <button key={val} onClick={() => updateOS(selMil._propId, selMil.id, os.id, "tipoDeslocamento", val)}
-                                      style={{ padding: "7px 16px", borderRadius: 8, border: `1px solid ${os.tipoDeslocamento===val||(!os.tipoDeslocamento&&val==="Aereo") ? "#10b981" : "rgba(255,255,255,0.1)"}`,
-                                        background: os.tipoDeslocamento===val||(!os.tipoDeslocamento&&val==="Aereo") ? "rgba(16,185,129,0.12)" : "transparent",
-                                        color: os.tipoDeslocamento===val||(!os.tipoDeslocamento&&val==="Aereo") ? "#10b981" : "#64748b", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                                      {lbl}
-                                    </button>
-                                  ))}
+                              {/* Pernoites em Trânsito */}
+                              <div style={{ background: "rgba(56,189,248,0.05)", border: "1px solid rgba(56,189,248,0.18)", borderRadius: 10, padding: "12px 14px" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: pernoites.length > 0 ? 10 : 0 }}>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: "#38bdf8", textTransform: "uppercase", letterSpacing: ".05em" }}>🌙 Pernoites em Trânsito</span>
+                                  <button style={{ ...S.btnPri, padding: "5px 12px", fontSize: 11 }} onClick={addPernoite}>{I.plus} Adicionar</button>
                                 </div>
-                              </FG>
-
-                              {/* Pernoites de Trânsito (apenas terrestre) */}
-                              {isTerr && (
-                                <div style={{ background: "rgba(251,146,60,0.05)", border: "1px solid rgba(251,146,60,0.2)", borderRadius: 10, padding: "12px 14px" }}>
-                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                                    <span style={{ fontSize: 11, fontWeight: 700, color: "#fb923c", textTransform: "uppercase", letterSpacing: ".05em" }}>🌙 Pernoites em Trânsito</span>
-                                    <button style={{ ...S.btnPri, padding: "5px 12px", fontSize: 11 }} onClick={addPernoite}>{I.plus} Adicionar</button>
-                                  </div>
-                                  {pernoites.length === 0 ? (
-                                    <p style={{ fontSize: 12, color: "#64748b", margin: 0 }}>Nenhum pernoite de trânsito. Clique em "Adicionar" para registrar cidades intermediárias.</p>
-                                  ) : (
-                                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                                      {pernoites.map((p, pi) => {
-                                        const vDiaria = p.localidade ? getValorDiaria(postoNaData, p.localidade) : 0;
-                                        return (
-                                          <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(0,0,0,0.2)", borderRadius: 8, padding: "8px 10px" }}>
+                                {pernoites.length === 0 ? (
+                                  <p style={{ fontSize: 12, color: "#475569", margin: "8px 0 0" }}>Nenhum pernoite registrado. Use "Adicionar" para registrar cidades intermediárias.</p>
+                                ) : (
+                                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
+                                    {pernoites.map((p, pi) => {
+                                      const dp = diffDays(p.dataInicio, p.dataFim);
+                                      const diasP = dp > 0 ? dp - 0.5 : 0;
+                                      const vPernoite = p.localidade && diasP > 0 ? getValorDiaria(postoNaData, p.localidade) * diasP : 0;
+                                      return (
+                                        <div key={p.id} style={{ background: "rgba(0,0,0,0.2)", borderRadius: 8, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+                                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                             <span style={{ fontSize: 11, color: "#64748b", fontWeight: 700, minWidth: 22 }}>{pi+1}</span>
-                                            <input list="cidades-list" style={{ ...S.inp, flex: 2 }} value={p.localidade || ""} onChange={e => updatePernoite(p.id, "localidade", e.target.value)} placeholder="Cidade do pernoite" />
-                                            <input type="date" style={{ ...S.inp, flex: 1 }} value={p.data || ""} onChange={e => updatePernoite(p.id, "data", e.target.value)} />
-                                            {vDiaria > 0 && <span style={{ fontSize: 11, color: "#fb923c", fontWeight: 700, whiteSpace: "nowrap" }}>{fmtMoney(vDiaria)}</span>}
+                                            <input list="cidades-list" style={{ ...S.inp, flex: 1 }} value={p.localidade || ""} onChange={e => updatePernoite(p.id, "localidade", e.target.value)} placeholder="Cidade do pernoite" />
+                                            {vPernoite > 0 && <span style={{ fontSize: 11, color: "#38bdf8", fontWeight: 700, whiteSpace: "nowrap" }}>{fmtMoney(vPernoite)}</span>}
                                             <button style={{ ...S.actBtn, color: "#ef4444", padding: 3 }} onClick={() => removePernoite(p.id)}>{I.x}</button>
                                           </div>
-                                        );
-                                      })}
-                                      {subtotalTransito > 0 && (
-                                        <div style={{ fontSize: 11, color: "#fb923c", fontWeight: 700, textAlign: "right", paddingRight: 4 }}>
-                                          Total trânsito: {fmtMoney(subtotalTransito)}
+                                          <div style={{ display: "flex", gap: 8, paddingLeft: 30 }}>
+                                            <FG label="Chegada" flex>
+                                              <input type="date" style={S.inp} value={p.dataInicio || ""} onChange={e => updatePernoite(p.id, "dataInicio", e.target.value)} />
+                                            </FG>
+                                            <FG label="Saída" flex>
+                                              <input type="date" style={S.inp} value={p.dataFim || ""} onChange={e => updatePernoite(p.id, "dataFim", e.target.value)} />
+                                            </FG>
+                                            {diasP > 0 && <div style={{ display:"flex", alignItems:"flex-end", paddingBottom:6 }}><span style={{ fontSize: 11, color: "#64748b" }}>{diasP} diária{diasP !== 1 ? "s" : ""}</span></div>}
+                                          </div>
                                         </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
+                                      );
+                                    })}
+                                    {subtotalTransito > 0 && (
+                                      <div style={{ fontSize: 11, color: "#38bdf8", fontWeight: 700, textAlign: "right", paddingRight: 4 }}>
+                                        Total trânsito: {fmtMoney(subtotalTransito)}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
 
                               {/* Detalhamento de diárias da OS */}
                               {diasOS > 0 && (
