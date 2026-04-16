@@ -197,7 +197,7 @@
 
     function diffDays(a, b) {
       if (!a || !b) return 0;
-      return Math.max(0, Math.ceil((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 864e5));
+      return Math.max(0, Math.ceil((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 864e5) + 1);
     }
 
     function calcDiasOS(oss, statusFilter = null) {
