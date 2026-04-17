@@ -4072,6 +4072,8 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
       const [authLoading, setAuthLoading] = useState(true);
       // Garante que o save só ocorre após dados terem sido carregados com sucesso do Firestore
       const safeToSave = React.useRef(false);
+      const [saveStatus, setSaveStatus] = useState("idle"); // "idle" | "saving" | "ok" | "error" | "no-auth"
+      const saveTimer = React.useRef(null);
       const [showSettings, setShowSettings] = useState(false);
       const [showArchive, setShowArchive] = useState(false);
 
@@ -4112,22 +4114,34 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
       }, []);
 
       useEffect(() => {
-        if (!loaded || !user || !safeToSave.current) return;
-        (async () => {
+        if (!loaded || !safeToSave.current) return;
+        if (!user) { setSaveStatus("no-auth"); return; }
+        setSaveStatus("saving");
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        saveTimer.current = setTimeout(async () => {
           try {
             // Separa logo e efetivoDb (dados grandes) em documento próprio
             const { settings = {}, ...rest } = data;
             const { logo, ...settingsSemLogo } = settings;
             const mainData = { ...rest, settings: settingsSemLogo };
             const assetsData = logo ? { logo } : {};
+            // Salva no Firestore
             await Promise.all([
               window.storage.set(STORAGE_KEY, JSON.stringify(mainData)),
               Object.keys(assetsData).length > 0
                 ? window.storage.set(STORAGE_KEY + "-assets", JSON.stringify(assetsData))
                 : Promise.resolve(),
             ]);
-          } catch (e) { console.error("Erro ao salvar:", e); }
-        })();
+            // Backup local para emergência
+            try { localStorage.setItem(STORAGE_KEY + "-backup", JSON.stringify(mainData)); } catch(_) {}
+            setSaveStatus("ok");
+            if (saveTimer.current) clearTimeout(saveTimer.current);
+            saveTimer.current = setTimeout(() => setSaveStatus("idle"), 3000);
+          } catch (e) {
+            console.error("Erro ao salvar:", e);
+            setSaveStatus("error");
+          }
+        }, 800); // debounce de 800ms para não salvar a cada tecla
       }, [data, loaded, user]);
 
       const setPropostas = fn => setData(d => ({ ...d, propostas: typeof fn === "function" ? fn(d.propostas) : fn }));
@@ -4745,17 +4759,41 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                   {({ dashboard:"Dashboard", consulta:"Consulta de Militares", propostas:"Propostas de Comissionamento", oficios:"Ofícios", pag:"PAG", portaria:"Portaria", numerario:"Numerário", os:"Ordens de Serviço", encerramento:"Encerramento" })[tab]}
                 </h1>
               </div>
-              {user && (
-                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <div style={{ width:36, height:36, borderRadius:10, background:"linear-gradient(135deg,#059669,#10b981)", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", fontSize:15, fontWeight:800, flexShrink:0 }}>
-                    {(user.email||"?").charAt(0).toUpperCase()}
+              <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                {/* Indicador de salvamento */}
+                {saveStatus === "saving" && (
+                  <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:"#64748b", background:"rgba(100,116,139,0.1)", border:"1px solid rgba(100,116,139,0.2)", borderRadius:8, padding:"5px 10px" }}>
+                    <div style={{ width:10, height:10, border:"2px solid #64748b", borderTop:"2px solid transparent", borderRadius:"50%", animation:"spin .8s linear infinite", flexShrink:0 }}/>
+                    Salvando...
                   </div>
-                  <div>
-                    <div style={{ fontSize:12, fontWeight:700, color:"#f1f5f9" }}>{(user.email||"").split("@")[0]}</div>
-                    <div style={{ fontSize:10, color:"#64748b" }}>Administrador</div>
+                )}
+                {saveStatus === "ok" && (
+                  <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:"#22c55e", background:"rgba(34,197,94,0.08)", border:"1px solid rgba(34,197,94,0.2)", borderRadius:8, padding:"5px 10px" }}>
+                    ✓ Salvo na nuvem
                   </div>
-                </div>
-              )}
+                )}
+                {saveStatus === "error" && (
+                  <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:"#ef4444", background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.25)", borderRadius:8, padding:"5px 10px", fontWeight:700 }}>
+                    ⚠ Erro ao salvar — verifique a conexão
+                  </div>
+                )}
+                {saveStatus === "no-auth" && (
+                  <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:"#f59e0b", background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.25)", borderRadius:8, padding:"5px 10px", fontWeight:700 }}>
+                    ⚠ Sem login — dados não salvos
+                  </div>
+                )}
+                {user && (
+                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                    <div style={{ width:36, height:36, borderRadius:10, background:"linear-gradient(135deg,#059669,#10b981)", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", fontSize:15, fontWeight:800, flexShrink:0 }}>
+                      {(user.email||"?").charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <div style={{ fontSize:12, fontWeight:700, color:"#f1f5f9" }}>{(user.email||"").split("@")[0]}</div>
+                      <div style={{ fontSize:10, color:"#64748b" }}>Administrador</div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </header>
 
             {needsAuth && !user ? (
