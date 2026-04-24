@@ -132,6 +132,7 @@
           await db.collection("appData").doc(key).set(JSON.parse(val));
         } catch (e) {
           console.error("Erro ao salvar dados na Nuvem:", e);
+          throw e; // propaga erro para o caller exibir "Erro ao salvar"
         }
       }
     };
@@ -4088,9 +4089,10 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
       useEffect(() => {
         (async () => {
           try {
-            const [r, rAssets] = await Promise.all([
+            const [r, rAssets, rDb] = await Promise.all([
               window.storage.get(STORAGE_KEY),
               window.storage.get(STORAGE_KEY + "-assets"),
+              window.storage.get(STORAGE_KEY + "-db"),
             ]);
             // r === null significa ERRO de rede/Firestore — NÃO libera o save
             // r.exists === false significa documento inexistente (novo usuário) — libera
@@ -4106,6 +4108,10 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
               const assets = JSON.parse(rAssets.value);
               loaded = { ...loaded, settings: { ...(loaded.settings || {}), ...assets } };
             }
+            if (rDb?.value) {
+              const dbData = JSON.parse(rDb.value);
+              loaded = { ...loaded, ...dbData };
+            }
             if (Object.keys(loaded).length > 0) setData(d => ({ ...d, ...loaded }));
             safeToSave.current = true; // libera só após Firestore confirmar estado
           } catch (e) { console.log("Erro ao inicializar dados:", e); }
@@ -4120,20 +4126,22 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
         if (saveTimer.current) clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(async () => {
           try {
-            // Separa logo e efetivoDb (dados grandes) em documento próprio
-            const { settings = {}, ...rest } = data;
+            // Separa logo (grande) e banco de dados (efetivoDb/missoesDb/cidadesDb) em documentos próprios
+            const { settings = {}, efetivoDb = [], missoesDb = [], cidadesDb = [], ...rest } = data;
             const { logo, ...settingsSemLogo } = settings;
             const mainData = { ...rest, settings: settingsSemLogo };
             const assetsData = logo ? { logo } : {};
+            const dbData = { efetivoDb, missoesDb, cidadesDb };
             // Salva no Firestore
             await Promise.all([
               window.storage.set(STORAGE_KEY, JSON.stringify(mainData)),
               Object.keys(assetsData).length > 0
                 ? window.storage.set(STORAGE_KEY + "-assets", JSON.stringify(assetsData))
                 : Promise.resolve(),
+              window.storage.set(STORAGE_KEY + "-db", JSON.stringify(dbData)),
             ]);
-            // Backup local para emergência
-            try { localStorage.setItem(STORAGE_KEY + "-backup", JSON.stringify(mainData)); } catch(_) {}
+            // Backup local para emergência (inclui tudo)
+            try { localStorage.setItem(STORAGE_KEY + "-backup", JSON.stringify({ ...mainData, efetivoDb, missoesDb, cidadesDb })); } catch(_) {}
             setSaveStatus("ok");
             if (saveTimer.current) clearTimeout(saveTimer.current);
             saveTimer.current = setTimeout(() => setSaveStatus("idle"), 3000);
