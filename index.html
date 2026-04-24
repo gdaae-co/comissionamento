@@ -4074,6 +4074,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
       // Garante que o save só ocorre após dados terem sido carregados com sucesso do Firestore
       const safeToSave = React.useRef(false);
       const [saveStatus, setSaveStatus] = useState("idle"); // "idle" | "saving" | "ok" | "error" | "no-auth"
+      const [saveError, setSaveError] = useState("");
       const saveTimer = React.useRef(null);
       const [showSettings, setShowSettings] = useState(false);
       const [showArchive, setShowArchive] = useState(false);
@@ -4098,7 +4099,8 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
             // r.exists === false significa documento inexistente (novo usuário) — libera
             // r.exists === true significa dados carregados — carrega e libera
             if (r === null) {
-              console.warn("⚠️ Falha ao carregar dados do Firestore — saves bloqueados para proteger dados.");
+              console.error("❌ Falha ao carregar dados do Firestore — saves bloqueados para proteger dados.");
+              alert("⚠️ Erro ao carregar dados da nuvem. As alterações NÃO serão salvas nesta sessão.\n\nVerifique sua conexão e recarregue a página.");
               setLoaded(true);
               return; // safeToSave permanece false — nenhum save vai ocorrer
             }
@@ -4114,6 +4116,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
             }
             if (Object.keys(loaded).length > 0) setData(d => ({ ...d, ...loaded }));
             safeToSave.current = true; // libera só após Firestore confirmar estado
+            console.log("✅ Firestore carregado — saves liberados.");
           } catch (e) { console.log("Erro ao inicializar dados:", e); }
           setLoaded(true);
         })();
@@ -4147,6 +4150,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
             saveTimer.current = setTimeout(() => setSaveStatus("idle"), 3000);
           } catch (e) {
             console.error("Erro ao salvar:", e);
+            setSaveError(e?.message || String(e));
             setSaveStatus("error");
           }
         }, 800); // debounce de 800ms para não salvar a cada tecla
@@ -4781,8 +4785,12 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
                   </div>
                 )}
                 {saveStatus === "error" && (
-                  <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:"#ef4444", background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:8, padding:"5px 10px", fontWeight:700 }}>
-                    ⚠ Erro ao salvar
+                  <div
+                    title={saveError}
+                    style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:"#ef4444", background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:8, padding:"5px 10px", fontWeight:700, cursor:"pointer" }}
+                    onClick={() => alert("Erro ao salvar:\n\n" + saveError)}
+                  >
+                    ⚠ Erro ao salvar (clique para detalhes)
                   </div>
                 )}
                 {(saveStatus === "no-auth" || (!user && loaded)) && (
