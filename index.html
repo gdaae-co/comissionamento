@@ -4088,6 +4088,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
       }, []);
 
       useEffect(() => {
+        if (authLoading) return; // aguarda auth resolver antes de tentar ler o Firestore
         (async () => {
           try {
             const [r, rAssets, rDb] = await Promise.all([
@@ -4100,7 +4101,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
             // r.exists === true significa dados carregados — carrega e libera
             if (r === null) {
               console.error("❌ Falha ao carregar dados do Firestore — saves bloqueados para proteger dados.");
-              alert("⚠️ Erro ao carregar dados da nuvem. As alterações NÃO serão salvas nesta sessão.\n\nVerifique sua conexão e recarregue a página.");
+              alert("⚠️ Erro ao carregar dados da nuvem. As alterações NÃO serão salvas nesta sessão.\n\nVerifique sua conexão e recarregue a página.\n\nSe o erro persistir, acesse o Firebase Console e verifique as regras do Firestore.");
               setLoaded(true);
               return; // safeToSave permanece false — nenhum save vai ocorrer
             }
@@ -4120,7 +4121,7 @@ ${proposta.observacoes ? '<div class="obs"><strong>Obs.:</strong> ' + proposta.o
           } catch (e) { console.log("Erro ao inicializar dados:", e); }
           setLoaded(true);
         })();
-      }, []);
+      }, [authLoading]);
 
       useEffect(() => {
         if (!loaded || !safeToSave.current) return;
