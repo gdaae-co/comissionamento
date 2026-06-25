@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!--
+    Cabo – Força Aérea Brasileira
+    Escudo pentagonal azul-escuro, duas barras horizontais prata paralelas
+  -->
+
+  <!-- Shield: flat top, vertical sides, base diagonal to bottom center point -->
+  <path d="M 36,28 L 220,28 L 220,182 L 128,230 L 36,182 Z"
+        fill="#1b2d6e" stroke="#4a6090" stroke-width="1.5"/>
+
+  <!-- Bar 1 (upper) -->
+  <rect x="60" y="108" width="136" height="18" rx="3" fill="#c8d4ea"/>
+
+  <!-- Bar 2 (lower) -->
+  <rect x="60" y="134" width="136" height="18" rx="3" fill="#c8d4ea"/>
+</svg>

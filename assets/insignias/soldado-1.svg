@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!--
+    Soldado de 1ª Classe – Força Aérea Brasileira
+    Escudo pentagonal azul-escuro, uma faixa/barra horizontal prata centralizada
+  -->
+
+  <!-- Shield: flat top, vertical sides, diagonal base meeting at bottom point -->
+  <path d="M 36,28 L 220,28 L 220,182 L 128,230 L 36,182 Z"
+        fill="#1b2d6e" stroke="#4a6090" stroke-width="1.5"/>
+
+  <!-- Single horizontal bar (chevron/stripe) centered vertically in shield -->
+  <rect x="60" y="118" width="136" height="20" rx="3" fill="#c8d4ea"/>
+</svg>

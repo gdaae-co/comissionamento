@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <clipPath id="sc">
+      <path d="M38,28 L218,28 L218,178 L128,228 L38,178 Z"/>
+    </clipPath>
+  </defs>
+
+  <!-- Shield body -->
+  <path d="M38,28 L218,28 L218,178 L128,228 L38,178 Z" fill="#1c2e6e" stroke="#5570a0" stroke-width="1.5"/>
+
+  <!-- Crossed rifles -->
+  <line x1="76" y1="88" x2="180" y2="168" stroke="#c8d4ea" stroke-width="5" stroke-linecap="round"/>
+  <line x1="160" y1="155" x2="185" y2="173" stroke="#c8d4ea" stroke-width="3" stroke-linecap="round"/>
+  <line x1="76" y1="88" x2="88" y2="96" stroke="#8090b0" stroke-width="3" stroke-linecap="round"/>
+
+  <line x1="180" y1="88" x2="76" y2="168" stroke="#c8d4ea" stroke-width="5" stroke-linecap="round"/>
+  <line x1="96" y1="155" x2="71" y2="173" stroke="#c8d4ea" stroke-width="3" stroke-linecap="round"/>
+  <line x1="180" y1="88" x2="168" y2="96" stroke="#8090b0" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Propeller center -->
+  <ellipse cx="128" cy="128" rx="5" ry="22" fill="#c8d4ea"/>
+  <ellipse cx="128" cy="128" rx="22" ry="5" fill="#c8d4ea"/>
+  <ellipse cx="128" cy="128" rx="5" ry="22" fill="#c8d4ea" transform="rotate(45,128,128)"/>
+  <ellipse cx="128" cy="128" rx="5" ry="22" fill="#c8d4ea" transform="rotate(-45,128,128)"/>
+  <circle cx="128" cy="128" r="9" fill="#1c2e6e" stroke="#c8d4ea" stroke-width="2"/>
+  <circle cx="128" cy="128" r="4" fill="#c8d4ea"/>
+</svg>
